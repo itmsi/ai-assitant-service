@@ -10,16 +10,22 @@ npm install
 
 ### 2. Konfigurasi Environment
 
-Copy file `environment.example` ke `.env` dan update konfigurasi berikut:
+Copy file `environment.example` ke `.env` dan update konfigurasi berikut sesuai provider yang digunakan:
 
 ```env
 # Enable AI Assistant
 AI_ENABLED=true
 
-# OpenAI Configuration
+# Gunakan OpenAI (default)
 AI_MODEL_PROVIDER=openai
 OPENAI_API_KEY=your-openai-api-key-here
 OPENAI_MODEL=gpt-3.5-turbo
+
+# Atau gunakan Sumopod (OpenAI-compatible)
+# AI_MODEL_PROVIDER=sumopod
+# SUMOPOD_API_KEY=sk-sumo-... (isi dengan API key Anda)
+# SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
+# SUMOPOD_MODEL=opsional (default mengikuti OPENAI_MODEL)
 
 # Enable Redis untuk memory
 REDIS_ENABLED=true
@@ -60,6 +66,8 @@ curl -X POST http://localhost:3000/api/v1/ai-assistant/chat \
     "message": "Tampilkan kandidat terbaru bulan ini"
   }'
 ```
+
+> Dengan token Bearer, backend otomatis membuat `sessionId` berdasarkan pengguna sehingga Anda tidak perlu mengirimkannya secara manual. Tambahkan `sessionId` hanya bila ingin mengelola banyak sesi secara eksplisit.
 
 ### Test dengan JWT Token
 

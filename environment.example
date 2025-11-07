@@ -248,11 +248,21 @@ APM_ENVIRONMENT=development
 # AI Assistant Configuration
 # ===========================================
 AI_ENABLED=true
-AI_MODEL_PROVIDER=openai
-OPENAI_API_KEY=your-openai-api-key-here
-OPENAI_MODEL=gpt-4-turbo-preview
+# Pilihan: openai, sumopod, ollama
+AI_MODEL_PROVIDER=sumopod
+
+# OpenAI Configuration (gunakan ketika provider=openai)
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
 OPENAI_TEMPERATURE=0.7
 OPENAI_MAX_TOKENS=2000
+
+# Sumopod Configuration (default)
+SUMOPOD_API_KEY=sk-sumo-your-api-key
+SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
+SUMOPOD_MODEL=gpt-4o
+SUMOPOD_TEMPERATURE=0.7
+SUMOPOD_MAX_TOKENS=2000
 AI_MAX_CONVERSATION_HISTORY=10
 AI_ENABLE_FUNCTION_CALLING=true
 

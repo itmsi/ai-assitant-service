@@ -27,6 +27,8 @@ Mengirim pesan ke AI Assistant.
 }
 ```
 
+> Catatan: `sessionId` bersifat opsional. Jika Anda mengirimkan JWT Bearer token, backend otomatis membuat session berdasarkan identitas pengguna sehingga body cukup berisi `message` saja.
+
 **Response:**
 ```json
 {
@@ -137,11 +139,24 @@ Tambahkan konfigurasi berikut ke file `.env`:
 ```env
 # AI Assistant Configuration
 AI_ENABLED=true
-AI_MODEL_PROVIDER=openai
+
+# Pilih provider model: openai, sumopod, atau ollama
+AI_MODEL_PROVIDER=sumopod
+
+# OpenAI Configuration (gunakan jika provider=openai)
 OPENAI_API_KEY=your-openai-api-key-here
 OPENAI_MODEL=gpt-4-turbo-preview
 OPENAI_TEMPERATURE=0.7
 OPENAI_MAX_TOKENS=2000
+
+# Sumopod Configuration (gunakan jika provider=sumopod)
+SUMOPOD_API_KEY=sk-sumo-abc123xyz456
+SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
+# Opsional: override model/parameter Sumopod
+# SUMOPOD_MODEL=gpt-4.1-mini
+# SUMOPOD_TEMPERATURE=0.7
+# SUMOPOD_MAX_TOKENS=2000
+
 AI_MAX_CONVERSATION_HISTORY=10
 AI_ENABLE_FUNCTION_CALLING=true
 

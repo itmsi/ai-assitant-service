@@ -24,21 +24,25 @@ const servers = [
 
 // Import schemas
 // Tambahkan schema module Anda di sini
-const exampleSchema = require('./schema/example');
+// const exampleSchema = require('./schema/example');
+const aiAssistantSchema = require('./schema/ai_assistant');
 
 // Import paths
 // Tambahkan path module Anda di sini
-const examplePaths = require('./path/example');
+// const examplePaths = require('./path/example');
+const aiAssistantPaths = require('./path/ai_assistant');
 
 // Combine all schemas
 const schemas = {
-  ...exampleSchema,
+  // ...exampleSchema,
+  ...aiAssistantSchema,
   // ...yourModuleSchema,
 };
 
 // Combine all paths
 const paths = {
-  ...examplePaths,
+  // ...examplePaths,
+  ...aiAssistantPaths,
   // ...yourModulePaths,
 };
 

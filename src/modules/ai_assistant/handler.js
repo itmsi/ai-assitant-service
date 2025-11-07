@@ -1,4 +1,4 @@
-const { baseResponse, errorResponse } = require('../../utils/response');
+const { baseResponseGeneral } = require('../../utils/exception');
 const { processChat, clearConversation } = require('./service');
 const { getConversation } = require('../../utils/redis');
 const { Logger } = require('../../utils/logger');
@@ -14,12 +14,16 @@ const chat = async (req, res) => {
 
     // Validation
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return errorResponse(res, { message: 'Pesan tidak boleh kosong' }, 400);
+      return baseResponseGeneral(res, {
+        success: false,
+        message: 'Pesan tidak boleh kosong',
+      });
     }
 
     // Get user info from JWT token
     let userId = 'anonymous';
     let authToken = null;
+    let isAuthenticated = false;
 
     if (req.headers.authorization) {
       try {
@@ -27,13 +31,22 @@ const chat = async (req, res) => {
         const decoded = jwtDecode(token);
         userId = decoded.sub || decoded.userId || decoded.id || 'anonymous';
         authToken = token;
+        isAuthenticated = userId !== 'anonymous';
       } catch (error) {
         logger.warn('Invalid JWT token, using anonymous user');
       }
     }
 
     // Generate session ID if not provided
-    const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
+    let finalSessionId = sessionId;
+
+    if (!finalSessionId) {
+      if (isAuthenticated) {
+        finalSessionId = `session_${userId}`;
+      } else {
+        finalSessionId = `session_guest_${Date.now()}`;
+      }
+    }
 
     // Process chat
     const result = await processChat(
@@ -43,19 +56,21 @@ const chat = async (req, res) => {
       authToken
     );
 
-    return baseResponse(res, {
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Chat berhasil diproses',
       data: {
         message: result.message,
         sessionId: finalSessionId,
         conversationHistory: result.conversationHistory,
       },
-      message: 'Chat berhasil diproses',
     });
   } catch (error) {
     logger.error(`Error in chat handler: ${error.message || error}`);
-    return errorResponse(res, {
+    return baseResponseGeneral(res.status(500), {
+      success: false,
       message: error.message || 'Terjadi kesalahan saat memproses chat',
-    }, 500);
+    });
   }
 };
 
@@ -67,7 +82,10 @@ const getHistory = async (req, res) => {
     const { sessionId } = req.params;
 
     if (!sessionId) {
-      return errorResponse(res, { message: 'Session ID tidak boleh kosong' }, 400);
+      return baseResponseGeneral(res, {
+        success: false,
+        message: 'Session ID tidak boleh kosong',
+      });
     }
 
     // Get user info from JWT token
@@ -85,18 +103,20 @@ const getHistory = async (req, res) => {
     // Get conversation history
     const history = await getConversation(userId, sessionId);
 
-    return baseResponse(res, {
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Riwayat percakapan berhasil diambil',
       data: {
         sessionId,
         conversationHistory: history || [],
       },
-      message: 'Riwayat percakapan berhasil diambil',
     });
   } catch (error) {
     logger.error(`Error in getHistory handler: ${error.message || error}`);
-    return errorResponse(res, {
+    return baseResponseGeneral(res.status(500), {
+      success: false,
       message: error.message || 'Terjadi kesalahan saat mengambil riwayat',
-    }, 500);
+    });
   }
 };
 
@@ -108,7 +128,10 @@ const clearHistory = async (req, res) => {
     const { sessionId } = req.params;
 
     if (!sessionId) {
-      return errorResponse(res, { message: 'Session ID tidak boleh kosong' }, 400);
+      return baseResponseGeneral(res, {
+        success: false,
+        message: 'Session ID tidak boleh kosong',
+      });
     }
 
     // Get user info from JWT token
@@ -126,15 +149,17 @@ const clearHistory = async (req, res) => {
     // Clear conversation
     await clearConversation(userId, sessionId);
 
-    return baseResponse(res, {
-      data: { sessionId },
+    return baseResponseGeneral(res, {
+      success: true,
       message: 'Riwayat percakapan berhasil dihapus',
+      data: { sessionId },
     });
   } catch (error) {
     logger.error(`Error in clearHistory handler: ${error.message || error}`);
-    return errorResponse(res, {
+    return baseResponseGeneral(res.status(500), {
+      success: false,
       message: error.message || 'Terjadi kesalahan saat menghapus riwayat',
-    }, 500);
+    });
   }
 };
 

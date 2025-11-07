@@ -31,6 +31,29 @@ const initializeModel = () => {
     return model;
   }
 
+  if (aiConfig.AI_MODEL_PROVIDER === 'sumopod') {
+    if (!aiConfig.SUMOPOD_API_KEY) {
+      throw new Error('Sumopod API key belum dikonfigurasi');
+    }
+
+    if (!aiConfig.SUMOPOD_BASE_URL) {
+      throw new Error('Sumopod base URL belum dikonfigurasi');
+    }
+
+    const model = new ChatOpenAI({
+      modelName: aiConfig.SUMOPOD_MODEL,
+      temperature: aiConfig.SUMOPOD_TEMPERATURE,
+      maxTokens: aiConfig.SUMOPOD_MAX_TOKENS,
+      openAIApiKey: aiConfig.SUMOPOD_API_KEY,
+      configuration: {
+        basePath: aiConfig.SUMOPOD_BASE_URL,
+        baseURL: aiConfig.SUMOPOD_BASE_URL,
+      },
+    });
+
+    return model;
+  }
+
   // Support for Ollama (future implementation)
   if (aiConfig.AI_MODEL_PROVIDER === 'ollama') {
     throw new Error('Ollama provider belum diimplementasikan. Silakan gunakan OpenAI.');
