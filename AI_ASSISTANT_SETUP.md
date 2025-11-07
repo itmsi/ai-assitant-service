@@ -27,6 +27,10 @@ OPENAI_MODEL=gpt-3.5-turbo
 # SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
 # SUMOPOD_MODEL=opsional (default mengikuti OPENAI_MODEL)
 
+# API Gateway (wajib untuk akses data microservice via AI)
+API_GATEWAY_BASE_URL=http://localhost:9545
+API_GATEWAY_TIMEOUT=30000
+
 # Enable Redis untuk memory
 REDIS_ENABLED=true
 REDIS_HOST=localhost

@@ -3,6 +3,82 @@ const { Logger } = require('../../utils/logger');
 const logger = Logger;
 const aiConfig = require('../../config/ai');
 
+const GATEWAY_ALLOWED_PREFIXES = [
+  '/api/auth',
+  '/api/menus',
+  '/api/companies',
+  '/api/departments',
+  '/api/employees',
+  '/api/roles',
+  '/api/permissions',
+  '/api/users',
+  '/api/titles',
+  '/api/menu-has-permissions',
+  '/api/role-has-menu-permissions',
+  '/api/customers',
+  '/api/bank_accounts',
+  '/api/quotation',
+  '/api/powerbi',
+  '/api/categories',
+  '/api/interview',
+  '/api/candidates',
+  '/api/applicants',
+  '/api/schedule-interviews',
+  '/api/on-board-documents',
+  '/api/background-checks',
+  '/api/catalogs',
+  '/api/driver_types',
+  '/api/vehicle_weights',
+  '/api/brands',
+  '/api/world_manufacturing_plants',
+  '/api/productions',
+  '/api/type_cabine',
+  '/api/cabines',
+  '/api/type_engine',
+  '/api/engines',
+  '/api/type_transmission',
+  '/api/transmission',
+  '/api/type_axel',
+  '/api/axel',
+  '/api/type_steering',
+  '/api/steering',
+  '/api/catalogs/all-item-catalogs',
+  '/api/epc',
+  '/api/public',
+];
+
+const sanitizePath = (path) => {
+  if (!path) return '';
+  return path.startsWith('/') ? path : `/${path}`;
+};
+
+const isGatewayPathAllowed = (path) => {
+  if (!path) return false;
+  if (!path.startsWith('/api/')) return false;
+  return GATEWAY_ALLOWED_PREFIXES.some((prefix) => path.startsWith(prefix));
+};
+
+const buildGatewayUrl = (path) => {
+  const base = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
+  if (!base) {
+    throw new Error('API Gateway base URL tidak dikonfigurasi');
+  }
+  return `${base}${sanitizePath(path)}`;
+};
+
+const getDefaultHeaders = (authToken, extraHeaders = {}) => {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  };
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  return headers;
+};
+
 /**
  * Function tools untuk LangChain Function Calling
  * Tools ini dapat dipanggil oleh AI untuk mengakses data dari microservice
@@ -37,21 +113,22 @@ const searchHRCandidates = {
   },
   execute: async ({ month, status, keyword, limit = 10 }, authToken) => {
     try {
-      const params = new URLSearchParams();
-      if (month) params.append('month', month);
-      if (status) params.append('status', status);
-      if (keyword) params.append('keyword', keyword);
-      params.append('limit', limit);
+      const params = {
+        month,
+        status,
+        keyword,
+        limit,
+      };
 
-      const response = await axios.get(
-        `${aiConfig.MICROSERVICE_HR_URL}/api/candidates?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
+        ? buildGatewayUrl('/api/candidates')
+        : `${(aiConfig.MICROSERVICE_HR_URL || '').replace(/\/$/, '')}/api/candidates`;
+
+      const response = await axios.get(baseUrl, {
+        headers: getDefaultHeaders(authToken),
+        params,
+        timeout: aiConfig.API_GATEWAY_TIMEOUT,
+      });
 
       return {
         success: true,
@@ -98,21 +175,22 @@ const searchHREmployees = {
   },
   execute: async ({ name, department, status, limit = 10 }, authToken) => {
     try {
-      const params = new URLSearchParams();
-      if (name) params.append('name', name);
-      if (department) params.append('department', department);
-      if (status) params.append('status', status);
-      params.append('limit', limit);
+      const params = {
+        name,
+        department,
+        status,
+        limit,
+      };
 
-      const response = await axios.get(
-        `${aiConfig.MICROSERVICE_HR_URL}/api/employees?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
+        ? buildGatewayUrl('/api/employees')
+        : `${(aiConfig.MICROSERVICE_HR_URL || '').replace(/\/$/, '')}/api/employees`;
+
+      const response = await axios.get(baseUrl, {
+        headers: getDefaultHeaders(authToken),
+        params,
+        timeout: aiConfig.API_GATEWAY_TIMEOUT,
+      });
 
       return {
         success: true,
@@ -163,22 +241,23 @@ const searchQuotations = {
   },
   execute: async ({ quotationNumber, status, startDate, endDate, limit = 10 }, authToken) => {
     try {
-      const params = new URLSearchParams();
-      if (quotationNumber) params.append('quotationNumber', quotationNumber);
-      if (status) params.append('status', status);
-      if (startDate) params.append('startDate', startDate);
-      if (endDate) params.append('endDate', endDate);
-      params.append('limit', limit);
+      const params = {
+        quotationNumber,
+        status,
+        startDate,
+        endDate,
+        limit,
+      };
 
-      const response = await axios.get(
-        `${aiConfig.MICROSERVICE_QUOTATION_URL}/api/quotations?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
+        ? buildGatewayUrl('/api/quotation/manage-quotation')
+        : `${(aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '')}/api/quotations`;
+
+      const response = await axios.get(baseUrl, {
+        headers: getDefaultHeaders(authToken),
+        params,
+        timeout: aiConfig.API_GATEWAY_TIMEOUT,
+      });
 
       return {
         success: true,
@@ -225,21 +304,22 @@ const searchECatalogProducts = {
   },
   execute: async ({ name, category, keyword, limit = 10 }, authToken) => {
     try {
-      const params = new URLSearchParams();
-      if (name) params.append('name', name);
-      if (category) params.append('category', category);
-      if (keyword) params.append('keyword', keyword);
-      params.append('limit', limit);
+      const params = {
+        name,
+        category,
+        keyword,
+        limit,
+      };
 
-      const response = await axios.get(
-        `${aiConfig.MICROSERVICE_ECATALOG_URL}/api/products?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
+        ? buildGatewayUrl('/api/catalogs/catalogItems')
+        : `${(aiConfig.MICROSERVICE_ECATALOG_URL || '').replace(/\/$/, '')}/api/products`;
+
+      const response = await axios.get(baseUrl, {
+        headers: getDefaultHeaders(authToken),
+        params,
+        timeout: aiConfig.API_GATEWAY_TIMEOUT,
+      });
 
       return {
         success: true,
@@ -328,6 +408,14 @@ const getToolsForLangChain = () => {
     {
       type: 'function',
       function: {
+        name: callGatewayEndpoint.name,
+        description: callGatewayEndpoint.description,
+        parameters: callGatewayEndpoint.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
         name: searchHRCandidates.name,
         description: searchHRCandidates.description,
         parameters: searchHRCandidates.parameters,
@@ -373,6 +461,7 @@ const getToolsForLangChain = () => {
  */
 const executeTool = async (toolName, parameters, authToken) => {
   const tools = {
+    [callGatewayEndpoint.name]: callGatewayEndpoint,
     [searchHRCandidates.name]: searchHRCandidates,
     [searchHREmployees.name]: searchHREmployees,
     [searchQuotations.name]: searchQuotations,
@@ -391,9 +480,105 @@ const executeTool = async (toolName, parameters, authToken) => {
   return await tool.execute(parameters, authToken);
 };
 
+const cleanObject = (obj = {}) => {
+  if (!obj || typeof obj !== 'object') return undefined;
+  return Object.entries(obj).reduce((acc, [key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return acc;
+    }
+    acc[key] = value;
+    return acc;
+  }, {});
+};
+
+const callGatewayEndpoint = {
+  name: 'call_gateway_endpoint',
+  description: 'Mengakses API Gateway menggunakan path dan method tertentu. Gunakan ini untuk membaca atau memodifikasi data di seluruh service yang tersedia (SSO, Quotation, Power BI, Interview, eCatalogue, EPC, dll). Pastikan path yang diberikan sesuai dengan daftar endpoint yang diizinkan.',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'Path endpoint yang ingin dipanggil. Contoh: /api/quotation/manage-quotation/get',
+      },
+      method: {
+        type: 'string',
+        enum: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        description: 'HTTP method yang digunakan',
+        default: 'GET',
+      },
+      query: {
+        type: 'object',
+        description: 'Query string parameters (opsional) dalam format key-value',
+      },
+      body: {
+        type: 'object',
+        description: 'Payload JSON untuk request (opsional, gunakan untuk POST/PUT/PATCH)',
+      },
+      headers: {
+        type: 'object',
+        description: 'Header tambahan (jika diperlukan). Authorization otomatis ditambahkan.',
+      },
+    },
+    required: ['path'],
+  },
+  execute: async ({ path, method = 'GET', query, body, headers }, authToken) => {
+    try {
+      if (!authToken) {
+        throw new Error('Token autentikasi tidak tersedia. Kirim Bearer token di header Authorization.');
+      }
+
+      const sanitizedPath = sanitizePath(path);
+      if (!isGatewayPathAllowed(sanitizedPath)) {
+        throw new Error('Path tidak diizinkan atau tidak dikenal dalam API Gateway.');
+      }
+
+      const url = buildGatewayUrl(sanitizedPath);
+      const upperMethod = method.toUpperCase();
+      const cleanedQuery = cleanObject(query);
+      const cleanedBody = cleanObject(body);
+
+      const axiosConfig = {
+        url,
+        method: upperMethod,
+        headers: getDefaultHeaders(authToken, headers),
+        timeout: aiConfig.API_GATEWAY_TIMEOUT,
+      };
+
+      if (cleanedQuery) {
+        axiosConfig.params = cleanedQuery;
+      }
+
+      if (upperMethod !== 'GET' && upperMethod !== 'DELETE') {
+        axiosConfig.data = cleanedBody || {};
+      } else if (cleanedBody) {
+        axiosConfig.data = cleanedBody;
+      }
+
+      const response = await axios(axiosConfig);
+
+      return {
+        success: true,
+        status: response.status,
+        data: response.data,
+        message: 'Permintaan API Gateway berhasil dieksekusi',
+      };
+    } catch (error) {
+      logger.error(`Error calling gateway endpoint: ${error.message || error}`);
+      return {
+        success: false,
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.response?.data?.message || error.message || 'Gagal memanggil API Gateway',
+      };
+    }
+  },
+};
+
 module.exports = {
   getToolsForLangChain,
   executeTool,
+  callGatewayEndpoint,
   searchHRCandidates,
   searchHREmployees,
   searchQuotations,

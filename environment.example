@@ -263,6 +263,10 @@ SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
 SUMOPOD_MODEL=gpt-4o
 SUMOPOD_TEMPERATURE=0.7
 SUMOPOD_MAX_TOKENS=2000
+
+# API Gateway Configuration (utama untuk integrasi AI)
+API_GATEWAY_BASE_URL=http://localhost:9545
+API_GATEWAY_TIMEOUT=30000
 AI_MAX_CONVERSATION_HISTORY=10
 AI_ENABLE_FUNCTION_CALLING=true
 
@@ -270,7 +274,7 @@ AI_ENABLE_FUNCTION_CALLING=true
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3
 
-# Microservice URLs for AI Function Calling
+# Microservice URLs (opsional, hanya gunakan jika tidak lewat gateway)
 MICROSERVICE_HR_URL=http://localhost:3001
 MICROSERVICE_QUOTATION_URL=http://localhost:3002
 MICROSERVICE_ECATALOG_URL=http://localhost:3003

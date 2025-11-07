@@ -132,6 +132,16 @@ Merangkum dan menganalisis data.
 - `data` (object): Data yang akan dirangkum
 - `summaryType` (string, optional): Jenis ringkasan (count, statistics, key_points)
 
+### 6. `call_gateway_endpoint`
+Akses generik ke API Gateway.
+
+**Parameters:**
+- `path` (string, required): Path endpoint, misalnya `/api/quotation/manage-quotation/get`
+- `method` (string, default: GET): Method HTTP (GET/POST/PUT/DELETE/PATCH)
+- `query` (object, optional): Query string parameters
+- `body` (object, optional): Payload JSON
+- `headers` (object, optional): Header tambahan (Authorization otomatis ditambahkan)
+
 ## Konfigurasi
 
 Tambahkan konfigurasi berikut ke file `.env`:
@@ -156,6 +166,10 @@ SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
 # SUMOPOD_MODEL=gpt-4.1-mini
 # SUMOPOD_TEMPERATURE=0.7
 # SUMOPOD_MAX_TOKENS=2000
+
+# API Gateway Configuration
+API_GATEWAY_BASE_URL=http://localhost:9545
+API_GATEWAY_TIMEOUT=30000
 
 AI_MAX_CONVERSATION_HISTORY=10
 AI_ENABLE_FUNCTION_CALLING=true
