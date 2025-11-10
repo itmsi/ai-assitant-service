@@ -7,6 +7,7 @@ const compress = require('compression')
 const methodOverride = require('method-override')
 const xss = require('xss-clean')
 const morgan = require('morgan')
+const cors = require('cors')
 const {
   notFoundHandler,
   errorHandler,
@@ -19,6 +20,7 @@ const healthCheck = require('./routes')
 const apiV1 = require('./routes/V1')
 const { initListener } = require('./listeners')
 const { prometheusMiddleware } = require('./middlewares/prometheus')
+const { corsOptions } = require('./utils/cors')
 
 // Conditionally initialize listeners only if RabbitMQ is enabled
 if (process.env.RABBITMQ_ENABLED === 'true' && process.env.RABBITMQ_URL && process.env.RABBITMQ_URL !== 'disabled') {
@@ -35,6 +37,8 @@ app.use(methodOverride()) // lets you use HTTP verbs
 app.use(xss()) // handler xss attack
 app.use(express.json({ limit })) // json limit
 app.use(express.urlencoded({ limit, extended: true })) // urlencoded limit
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
 if (process.env.NODE_ENV === 'production') {
   app.use(morgan(MORGAN_FORMAT.PROD))
 } else {
@@ -46,6 +50,7 @@ app.use(prometheusMiddleware)
 
 app.use(healthCheck) // routing
 app.use(apiV1) // routing
+console.info('API V1 routes mounted')
 app.use('/public', express.static('public')) // for public folder
 app.use(notFoundHandler) // 404 handler
 app.use(errorHandler) // error handlerr

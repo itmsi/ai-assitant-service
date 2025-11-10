@@ -1,7 +1,7 @@
 const express = require('express')
 // const { verifyToken } = require('../../middlewares')
 
-const routing = express();
+const routing = express.Router();
 const API_TAG = '/api';
 
 /* RULE
