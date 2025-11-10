@@ -98,6 +98,122 @@ const convertFromLangChainMessages = (messages) => {
     }));
 };
 
+const parseToolArguments = (args) => {
+  if (!args) return {};
+
+  if (typeof args === 'object') {
+    return args;
+  }
+
+  try {
+    return JSON.parse(args);
+  } catch (error) {
+    logger.warn(`Failed to parse tool arguments: ${error.message || error}`);
+    return {};
+  }
+};
+
+const normalizeToolCall = (toolCall, index = 0) => {
+  if (!toolCall) return null;
+
+  const generatedId = `tool_call_${Date.now()}_${index}`;
+
+  if (toolCall.id || toolCall.tool_call_id) {
+    return {
+      id: toolCall.id || toolCall.tool_call_id,
+      name:
+        toolCall.name
+        || toolCall.function?.name
+        || toolCall.additional_kwargs?.function_call?.name,
+      args: parseToolArguments(
+        toolCall.args
+          || toolCall.function?.arguments
+          || toolCall.additional_kwargs?.function_call?.arguments
+          || toolCall.arguments
+      ),
+    };
+  }
+
+  return {
+    id: generatedId,
+    name:
+      toolCall.name
+      || toolCall.function?.name
+      || toolCall.additional_kwargs?.function_call?.name,
+    args: parseToolArguments(
+      toolCall.args
+        || toolCall.function?.arguments
+        || toolCall.additional_kwargs?.function_call?.arguments
+        || toolCall.arguments
+    ),
+  };
+};
+
+const extractToolCalls = (message) => {
+  if (!message) return [];
+
+  const rawToolCalls = [];
+
+  if (Array.isArray(message.tool_calls)) {
+    rawToolCalls.push(...message.tool_calls);
+  }
+
+  if (Array.isArray(message.additional_kwargs?.tool_calls)) {
+    rawToolCalls.push(...message.additional_kwargs.tool_calls);
+  }
+
+  if (message.tool_call) {
+    rawToolCalls.push(message.tool_call);
+  }
+
+  if (message.additional_kwargs?.function_call) {
+    rawToolCalls.push(message.additional_kwargs.function_call);
+  }
+
+  if (message.function_call) {
+    rawToolCalls.push(message.function_call);
+  }
+
+  return rawToolCalls
+    .map((call, index) => normalizeToolCall(call, index))
+    .filter((call) => call && call.name);
+};
+
+const getMessageContent = (message) => {
+  if (!message) return '';
+
+  const { content } = message;
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.content === 'string') return part.content;
+        if (Array.isArray(part?.content)) {
+          return part.content
+            .map((nested) => (typeof nested === 'string' ? nested : nested?.text || ''))
+            .filter(Boolean)
+            .join('\n');
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  if (content && typeof content === 'object' && typeof content.text === 'string') {
+    return content.text;
+  }
+
+  return '';
+};
+
 /**
  * Process AI chat with function calling support
  */
@@ -140,16 +256,17 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
 
     // Invoke model
     let response = await modelToUse.invoke(messages);
+    let toolCalls = extractToolCalls(response);
 
     // Handle function calls if any
-    if (response.tool_calls && response.tool_calls.length > 0) {
-      logger.info(`Function calls detected: ${response.tool_calls.length}`);
+    while (toolCalls.length > 0) {
+      logger.info(`Function calls detected: ${toolCalls.length}`);
 
       // Add AI response to messages
       messages.push(response);
 
       // Execute function calls and create tool messages
-      for (const toolCall of response.tool_calls) {
+      for (const toolCall of toolCalls) {
         try {
           const toolName = toolCall.name;
           const toolArgs = toolCall.args || {};
@@ -183,16 +300,11 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
 
       // Get final response from model with tool results
       response = await model.invoke(messages);
+      toolCalls = extractToolCalls(response);
     }
 
     // Extract response content
-    let responseContent = response.content;
-    
-    // If response has tool calls, we need to handle it differently
-    if (response.tool_calls && response.tool_calls.length > 0) {
-      // This is a tool calling response, we need to execute and get final answer
-      // This case is already handled above
-    }
+    let responseContent = getMessageContent(response);
 
     // Update conversation history
     conversationHistory.push({
@@ -205,6 +317,17 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
       content: responseContent,
       timestamp: new Date().toISOString(),
     });
+
+    if (!responseContent) {
+      responseContent = JSON.stringify(
+        {
+          type: response?._getType?.() || response?.type || 'unknown',
+          message: 'Model tidak memberikan jawaban teks. Silakan ulangi pertanyaan atau laporkan ke admin.',
+        },
+        null,
+        2
+      );
+    }
 
     // Limit conversation history
     if (conversationHistory.length > aiConfig.AI_MAX_CONVERSATION_HISTORY * 2) {

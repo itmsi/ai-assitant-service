@@ -6,45 +6,158 @@ const aiConfig = require('../../config/ai');
 const GATEWAY_ALLOWED_PREFIXES = [
   '/api/auth',
   '/api/menus',
+  '/api/menus/get',
+  '/api/menus/create',
   '/api/companies',
+  '/api/companies/get',
+  '/api/companies/create',
   '/api/departments',
+  '/api/departments/get',
+  '/api/departments/create',
   '/api/employees',
+  '/api/employees/get',
+  '/api/employees/create',
   '/api/roles',
+  '/api/roles/get',
+  '/api/roles/create',
   '/api/permissions',
+  '/api/permissions/get',
+  '/api/permissions/create',
   '/api/users',
+  '/api/users/get',
+  '/api/users/create',
   '/api/titles',
+  '/api/titles/get',
+  '/api/titles/create',
   '/api/menu-has-permissions',
   '/api/role-has-menu-permissions',
   '/api/customers',
+  '/api/customers/get',
+  '/api/customers/create',
   '/api/bank_accounts',
-  '/api/quotation',
+  '/api/bank_accounts/get',
+  '/api/bank_accounts/create',
+  '/api/quotation/customer',
+  '/api/quotation/customer/get',
+  '/api/quotation/customer/create',
+  '/api/quotation/sales',
+  '/api/quotation/sales/get',
+  '/api/quotation/sales/create',
+  '/api/quotation/bank-account',
+  '/api/quotation/bank-account/get',
+  '/api/quotation/bank-account/create',
+  '/api/quotation/item_product',
+  '/api/quotation/item_product/get',
+  '/api/quotation/item_product/create',
+  '/api/quotation/manage-quotation',
+  '/api/quotation/manage-quotation/get',
+  '/api/quotation/manage-quotation/create',
+  '/api/quotation/term_content',
+  '/api/quotation/term_content/get',
+  '/api/quotation/term_content/create',
+  '/api/quotation/componen_product',
+  '/api/quotation/componen_product/get',
+  '/api/quotation/componen_product/create',
+  '/api/quotation/accessory',
+  '/api/quotation/accessory/get',
+  '/api/quotation/accessory/create',
   '/api/powerbi',
+  '/api/powerbi/get',
+  '/api/powerbi/create',
   '/api/categories',
+  '/api/categories/get',
+  '/api/categories/create',
   '/api/interview',
+  '/api/interview/companies',
+  '/api/interview/companies/get',
+  '/api/interview/departments',
+  '/api/interview/departments/get',
+  '/api/interview/titles',
+  '/api/interview/titles/get',
+  '/api/interview/islands',
+  '/api/interview/islands/get',
+  '/api/interview/genders',
+  '/api/interview/genders/get',
+  '/api/interview/employees',
+  '/api/interview/employees/get',
   '/api/candidates',
+  '/api/candidates/get',
   '/api/applicants',
+  '/api/applicants/get',
+  '/api/notes',
+  '/api/notes/get',
   '/api/schedule-interviews',
+  '/api/schedule-interviews/get',
+  '/api/interviews',
+  '/api/interviews/get',
   '/api/on-board-documents',
+  '/api/on-board-documents/get',
   '/api/background-checks',
+  '/api/background-checks/get',
+  '/api/public/applicants/get',
   '/api/catalogs',
-  '/api/driver_types',
-  '/api/vehicle_weights',
-  '/api/brands',
-  '/api/world_manufacturing_plants',
-  '/api/productions',
-  '/api/type_cabine',
-  '/api/cabines',
-  '/api/type_engine',
-  '/api/engines',
-  '/api/type_transmission',
-  '/api/transmission',
-  '/api/type_axel',
-  '/api/axel',
-  '/api/type_steering',
-  '/api/steering',
+  '/api/catalogs/get',
+  '/api/catalogs/categories',
+  '/api/catalogs/categories/get',
+  '/api/catalogs/catalogItems',
+  '/api/catalogs/catalogItems/get',
+  '/api/catalogs/locations',
+  '/api/catalogs/locations/get',
+  '/api/catalogs/driver_types',
+  '/api/catalogs/driver_types/get',
+  '/api/catalogs/vehicle_weights',
+  '/api/catalogs/vehicle_weights/get',
+  '/api/catalogs/brands',
+  '/api/catalogs/brands/get',
+  '/api/catalogs/world_manufacturing_plants',
+  '/api/catalogs/world_manufacturing_plants/get',
+  '/api/catalogs/productions',
+  '/api/catalogs/productions/get',
+  '/api/catalogs/sidebars',
+  '/api/catalogs/sidebars/get',
+  '/api/catalogs/type_cabine',
+  '/api/catalogs/type_cabine/get',
+  '/api/catalogs/cabines',
+  '/api/catalogs/cabines/get',
+  '/api/catalogs/type_engine',
+  '/api/catalogs/type_engine/get',
+  '/api/catalogs/engines',
+  '/api/catalogs/engines/get',
+  '/api/catalogs/type_transmission',
+  '/api/catalogs/type_transmission/get',
+  '/api/catalogs/transmission',
+  '/api/catalogs/transmission/get',
+  '/api/catalogs/type_axel',
+  '/api/catalogs/type_axel/get',
+  '/api/catalogs/axel',
+  '/api/catalogs/axel/get',
+  '/api/catalogs/type_steering',
+  '/api/catalogs/type_steering/get',
+  '/api/catalogs/steering',
+  '/api/catalogs/steering/get',
   '/api/catalogs/all-item-catalogs',
+  '/api/catalogs/all-item-catalogs/get',
   '/api/epc',
+  '/api/epc/master_category',
+  '/api/epc/master_category/get',
+  '/api/epc/categories',
+  '/api/epc/categories/get',
+  '/api/epc/type_category',
+  '/api/epc/type_category/get',
+  '/api/epc/item_category',
+  '/api/epc/item_category/get',
+  '/api/epc/dokumen',
+  '/api/epc/dokumen/get',
+  '/api/epc/dokumen/duplikat',
+  '/api/epc/products',
+  '/api/epc/products/get',
+  '/api/epc/unit',
+  '/api/epc/unit/get',
   '/api/public',
+  '/api/public/product',
+  '/api/public/product/get',
+  '/api/public/specification',
+  '/api/public/specification/get',
 ];
 
 const sanitizePath = (path) => {
@@ -77,6 +190,22 @@ const getDefaultHeaders = (authToken, extraHeaders = {}) => {
   }
 
   return headers;
+};
+
+const cleanObject = (obj = {}) => {
+  if (!obj || typeof obj !== 'object') return undefined;
+  return Object.entries(obj).reduce((acc, [key, value]) => {
+    if (
+      value === undefined
+      || value === null
+      || value === ''
+      || (typeof value === 'number' && Number.isNaN(value))
+    ) {
+      return acc;
+    }
+    acc[key] = value;
+    return acc;
+  }, {});
 };
 
 /**
@@ -113,22 +242,23 @@ const searchHRCandidates = {
   },
   execute: async ({ month, status, keyword, limit = 10 }, authToken) => {
     try {
-      const params = {
+      const payload = cleanObject({
         month,
         status,
         keyword,
         limit,
-      };
-
-      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
-        ? buildGatewayUrl('/api/candidates')
-        : `${(aiConfig.MICROSERVICE_HR_URL || '').replace(/\/$/, '')}/api/candidates`;
-
-      const response = await axios.get(baseUrl, {
-        headers: getDefaultHeaders(authToken),
-        params,
-        timeout: aiConfig.API_GATEWAY_TIMEOUT,
       });
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_HR_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/candidates/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
 
       return {
         success: true,
@@ -175,22 +305,24 @@ const searchHREmployees = {
   },
   execute: async ({ name, department, status, limit = 10 }, authToken) => {
     try {
-      const params = {
+      const payload = cleanObject({
         name,
         department,
         status,
         limit,
-      };
-
-      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
-        ? buildGatewayUrl('/api/employees')
-        : `${(aiConfig.MICROSERVICE_HR_URL || '').replace(/\/$/, '')}/api/employees`;
-
-      const response = await axios.get(baseUrl, {
-        headers: getDefaultHeaders(authToken),
-        params,
-        timeout: aiConfig.API_GATEWAY_TIMEOUT,
       });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_HR_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/employees/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
 
       return {
         success: true,
@@ -241,23 +373,25 @@ const searchQuotations = {
   },
   execute: async ({ quotationNumber, status, startDate, endDate, limit = 10 }, authToken) => {
     try {
-      const params = {
+      const payload = cleanObject({
         quotationNumber,
         status,
         startDate,
         endDate,
         limit,
-      };
-
-      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
-        ? buildGatewayUrl('/api/quotation/manage-quotation')
-        : `${(aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '')}/api/quotations`;
-
-      const response = await axios.get(baseUrl, {
-        headers: getDefaultHeaders(authToken),
-        params,
-        timeout: aiConfig.API_GATEWAY_TIMEOUT,
       });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/quotation/manage-quotation/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
 
       return {
         success: true,
@@ -304,22 +438,26 @@ const searchECatalogProducts = {
   },
   execute: async ({ name, category, keyword, limit = 10 }, authToken) => {
     try {
-      const params = {
+      const payload = cleanObject({
         name,
         category,
         keyword,
         limit,
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_ECATALOG_URL || '').replace(/\/$/, '');
+      const endpoint = aiConfig.API_GATEWAY_BASE_URL
+        ? `${baseUrl}${sanitizePath('/api/catalogs/catalogItems/get')}`
+        : `${baseUrl}${sanitizePath('/api/products')}`;
+
+      const axiosConfig = {
+        headers: getDefaultHeaders(authToken),
+        timeout: aiConfig.API_GATEWAY_TIMEOUT,
       };
 
-      const baseUrl = aiConfig.API_GATEWAY_BASE_URL
-        ? buildGatewayUrl('/api/catalogs/catalogItems')
-        : `${(aiConfig.MICROSERVICE_ECATALOG_URL || '').replace(/\/$/, '')}/api/products`;
-
-      const response = await axios.get(baseUrl, {
-        headers: getDefaultHeaders(authToken),
-        params,
-        timeout: aiConfig.API_GATEWAY_TIMEOUT,
-      });
+      const response = aiConfig.API_GATEWAY_BASE_URL
+        ? await axios.post(endpoint, payload || {}, axiosConfig)
+        : await axios.get(endpoint, { ...axiosConfig, params: payload });
 
       return {
         success: true,
@@ -480,15 +618,30 @@ const executeTool = async (toolName, parameters, authToken) => {
   return await tool.execute(parameters, authToken);
 };
 
-const cleanObject = (obj = {}) => {
-  if (!obj || typeof obj !== 'object') return undefined;
-  return Object.entries(obj).reduce((acc, [key, value]) => {
-    if (value === undefined || value === null || value === '') {
-      return acc;
+const isWriteOperation = (method, path) => {
+  const upperMethod = (method || 'GET').toUpperCase();
+  const normalizedPath = (path || '').trim().toLowerCase().replace(/\/+$/, '');
+
+  if (upperMethod === 'GET' || upperMethod === 'HEAD' || upperMethod === 'OPTIONS') {
+    return false;
+  }
+
+  if (upperMethod === 'POST') {
+    if (normalizedPath.endsWith('/get')) {
+      return false;
     }
-    acc[key] = value;
-    return acc;
-  }, {});
+
+    const safePostPatterns = [
+      /\/search$/,
+      /\/login$/,
+      /\/logout$/,
+      /\/dashboard$/,
+    ];
+
+    return !safePostPatterns.some((pattern) => pattern.test(normalizedPath));
+  }
+
+  return true;
 };
 
 const callGatewayEndpoint = {
@@ -533,8 +686,12 @@ const callGatewayEndpoint = {
         throw new Error('Path tidak diizinkan atau tidak dikenal dalam API Gateway.');
       }
 
-      const url = buildGatewayUrl(sanitizedPath);
+      if (!aiConfig.AI_ALLOW_WRITE_ACTIONS && isWriteOperation(method, sanitizedPath)) {
+        throw new Error('Akses tulis dimatikan. Hanya operasi baca yang diperbolehkan.');
+      }
+
       const upperMethod = method.toUpperCase();
+      const url = buildGatewayUrl(sanitizedPath);
       const cleanedQuery = cleanObject(query);
       const cleanedBody = cleanObject(body);
 

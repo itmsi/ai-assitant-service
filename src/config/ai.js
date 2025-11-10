@@ -27,6 +27,7 @@ module.exports = {
   // AI Assistant Settings
   AI_MAX_CONVERSATION_HISTORY: parseInt(process.env.AI_MAX_CONVERSATION_HISTORY || '10'),
   AI_ENABLE_FUNCTION_CALLING: process.env.AI_ENABLE_FUNCTION_CALLING !== 'false',
+  AI_ALLOW_WRITE_ACTIONS: process.env.AI_ALLOW_WRITE_ACTIONS === 'true',
   
   // Microservice URLs for function calling
   MICROSERVICE_HR_URL: process.env.MICROSERVICE_HR_URL || 'http://localhost:3001',

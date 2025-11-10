@@ -173,6 +173,7 @@ API_GATEWAY_TIMEOUT=30000
 
 AI_MAX_CONVERSATION_HISTORY=10
 AI_ENABLE_FUNCTION_CALLING=true
+AI_ALLOW_WRITE_ACTIONS=false
 
 # Redis Configuration (required for memory)
 REDIS_ENABLED=true
@@ -241,9 +242,11 @@ src/modules/ai_assistant/
 
 3. **OpenAI API Key**: Pastikan API key OpenAI sudah dikonfigurasi dengan benar di file `.env`.
 
-4. **Microservice URLs**: Pastikan URL microservice sudah dikonfigurasi dengan benar. AI Assistant akan memanggil endpoint di microservice tersebut.
+4. **Akses Tulis AI**: Gunakan `AI_ALLOW_WRITE_ACTIONS=true` hanya ketika AI boleh melakukan operasi create/update/delete. Jika di-set `false`, AI hanya dapat melakukan permintaan baca (GET dan POST yang bersifat query seperti `/get`).
 
-5. **Error Handling**: Jika microservice tidak tersedia atau error, AI Assistant akan memberikan response yang informatif kepada user.
+5. **Microservice URLs**: Pastikan URL microservice sudah dikonfigurasi dengan benar. AI Assistant akan memanggil endpoint di microservice tersebut.
+
+6. **Error Handling**: Jika microservice tidak tersedia atau error, AI Assistant akan memberikan response yang informatif kepada user.
 
 ## Troubleshooting
 
