@@ -1,14 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const cors = require('cors');
 const handler = require('./handler');
-const { corsOptions } = require('../../utils/cors');
 
 console.log('AI Assistant routes initialized');
 // Optional: Add token verification if needed
 // const { verifyToken } = require('../../middlewares');
-
-router.options('/chat', cors(corsOptions));
 
 /**
  * @route   POST /api/ai-assistant/chat
@@ -18,7 +14,6 @@ router.options('/chat', cors(corsOptions));
  */
 router.post(
   '/chat',
-  cors(corsOptions),
   handler.chat
 );
 
