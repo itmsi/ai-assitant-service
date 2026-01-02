@@ -26,16 +26,19 @@ const servers = [
 // Tambahkan schema module Anda di sini
 // const exampleSchema = require('./schema/example');
 const aiAssistantSchema = require('./schema/ai_assistant');
+const customerValidationSchema = require('./schema/customer_validation');
 
 // Import paths
 // Tambahkan path module Anda di sini
 // const examplePaths = require('./path/example');
 const aiAssistantPaths = require('./path/ai_assistant');
+const customerValidationPaths = require('./path/customer_validation');
 
 // Combine all schemas
 const schemas = {
   // ...exampleSchema,
   ...aiAssistantSchema,
+  ...customerValidationSchema,
   // ...yourModuleSchema,
 };
 
@@ -43,6 +46,7 @@ const schemas = {
 const paths = {
   // ...examplePaths,
   ...aiAssistantPaths,
+  ...customerValidationPaths,
   // ...yourModulePaths,
 };
 
