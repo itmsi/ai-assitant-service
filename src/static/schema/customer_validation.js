@@ -77,6 +77,42 @@ const customerValidationSchemas = {
         example: 3
       }
     }
+  },
+  ErrorResponse: {
+    type: 'object',
+    properties: {
+      success: {
+        type: 'boolean',
+        example: false,
+        description: 'Success status, always false for error responses'
+      },
+      message: {
+        type: 'string',
+        description: 'Error message',
+        example: 'Validation error atau server error'
+      },
+      errors: {
+        oneOf: [
+          {
+            type: 'object',
+            description: 'Additional error details',
+            nullable: true
+          },
+          {
+            type: 'null'
+          }
+        ],
+        description: 'Additional error details (nullable)',
+        example: null
+      },
+      timestamp: {
+        type: 'string',
+        format: 'date-time',
+        description: 'Error timestamp in ISO 8601 format',
+        example: '2025-01-02T07:00:00.000Z'
+      }
+    },
+    required: ['success', 'message', 'timestamp']
   }
 };
 
