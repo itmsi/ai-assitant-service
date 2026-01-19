@@ -75,7 +75,6 @@ Ikuti seluruh instruksi ini secara konsisten dalam setiap interaksi.`;
   // Check if data already exists
   const existing = await knex('ai_prompts')
     .where({ key: 'system_prompt_default', deleted_at: null })
-    .orderBy('version', 'desc')
     .first();
   
   if (existing) {
@@ -87,31 +86,22 @@ Ikuti seluruh instruksi ini secara konsisten dalam setiap interaksi.`;
     const patch = parseInt(versionParts[2]) || 0;
     const newVersion = `${major}.${minor + 1}.0`;
     
-    // Deactivate old version
+    // Update existing prompt (karena key unique, tidak bisa insert baru)
     await knex('ai_prompts')
-      .where({ key: 'system_prompt_default', is_active: true, deleted_at: null })
+      .where({ key: 'system_prompt_default', deleted_at: null })
       .update({
-        is_active: false,
+        content: defaultPrompt,
+        version: newVersion,
+        is_active: true,
+        description: 'Default system prompt untuk AI Assistant Mosa (dengan scope constraint)',
+        metadata: JSON.stringify({
+          author: 'System',
+          created_by: 'seeder',
+          tags: ['default', 'system', 'mosa', 'scope-constraint'],
+          previous_version: currentVersion
+        }),
         updated_at: knex.fn.now()
       });
-    
-    // Insert new version
-    await knex('ai_prompts').insert({
-      id: knex.raw('uuid_generate_v4()'),
-      key: 'system_prompt_default',
-      content: defaultPrompt,
-      version: newVersion,
-      is_active: true,
-      description: 'Default system prompt untuk AI Assistant Mosa (dengan scope constraint)',
-      metadata: JSON.stringify({
-        author: 'System',
-        created_by: 'seeder',
-        tags: ['default', 'system', 'mosa', 'scope-constraint'],
-        previous_version: currentVersion
-      }),
-      created_at: knex.fn.now(),
-      updated_at: knex.fn.now()
-    });
     
     console.log(`Default system prompt updated from version ${currentVersion} to ${newVersion}`);
   } else {
