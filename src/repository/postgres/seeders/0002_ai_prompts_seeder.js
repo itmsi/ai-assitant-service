@@ -1,46 +1,19 @@
-module.exports = {
-  // AI Model Configuration
-  AI_ENABLED: process.env.AI_ENABLED === 'true',
-  AI_MODEL_PROVIDER: process.env.AI_MODEL_PROVIDER || 'openai', // 'openai', 'sumopod', atau 'ollama'
-  
-  // OpenAI Configuration
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
-  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o',
-  OPENAI_TEMPERATURE: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
-  OPENAI_MAX_TOKENS: parseInt(process.env.OPENAI_MAX_TOKENS || '2000'),
+/**
+ * Seeder: AI Prompts default data
+ * Insert default system prompt untuk AI Assistant
+ */
 
-  // Sumopod Configuration
-  SUMOPOD_API_KEY: process.env.SUMOPOD_API_KEY || '',
-  SUMOPOD_BASE_URL: process.env.SUMOPOD_BASE_URL || '',
-  SUMOPOD_MODEL: process.env.SUMOPOD_MODEL || process.env.OPENAI_MODEL || 'sumopod-gpt',
-  SUMOPOD_TEMPERATURE: parseFloat(process.env.SUMOPOD_TEMPERATURE || process.env.OPENAI_TEMPERATURE || '0.7'),
-  SUMOPOD_MAX_TOKENS: parseInt(process.env.SUMOPOD_MAX_TOKENS || process.env.OPENAI_MAX_TOKENS || '2000'),
-
-  // API Gateway Configuration
-  API_GATEWAY_BASE_URL: process.env.API_GATEWAY_BASE_URL || '',
-  API_GATEWAY_TIMEOUT: parseInt(process.env.API_GATEWAY_TIMEOUT || '30000'),
+exports.seed = async function(knex) {
+  // Check if data already exists
+  const existing = await knex('ai_prompts').where({ key: 'system_prompt_default' }).first();
   
-  // Ollama Configuration (for local models)
-  OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-  OLLAMA_MODEL: process.env.OLLAMA_MODEL || 'llama3',
+  if (existing) {
+    console.log('Default system prompt already exists, skipping seed...');
+    return;
+  }
   
-  // AI Assistant Settings
-  AI_MAX_CONVERSATION_HISTORY: parseInt(process.env.AI_MAX_CONVERSATION_HISTORY || '10'),
-  AI_ENABLE_FUNCTION_CALLING: process.env.AI_ENABLE_FUNCTION_CALLING !== 'false',
-  AI_ALLOW_WRITE_ACTIONS: process.env.AI_ALLOW_WRITE_ACTIONS === 'true',
-  
-  // Microservice URLs for function calling
-  MICROSERVICE_HR_URL: process.env.MICROSERVICE_HR_URL || 'http://localhost:3001',
-  MICROSERVICE_QUOTATION_URL: process.env.MICROSERVICE_QUOTATION_URL || 'http://localhost:3002',
-  MICROSERVICE_ECATALOG_URL: process.env.MICROSERVICE_ECATALOG_URL || 'http://localhost:3003',
-  
-  // System Prompt - sekarang diambil dari database (ai_prompts table)
-  // Fallback ke environment variable jika database tidak tersedia
-  // Key default: 'system_prompt_default'
-  AI_SYSTEM_PROMPT_KEY: process.env.AI_SYSTEM_PROMPT_KEY || 'system_prompt_default',
-  
-  // Fallback prompt jika database tidak tersedia (untuk development/testing)
-  AI_SYSTEM_PROMPT_FALLBACK: process.env.AI_SYSTEM_PROMPT || `Kamu adalah Mosa, asisten virtual resmi Motor Sights International (MSI). Identitas visual perusahaan menekankan filosofi "Leading In Service Innovation" dengan palet warna utama biru dan merah. Berbicaralah dengan hangat, profesional, dan penuh perhatian dalam bahasa Indonesia yang jelas, sopan, dan ringkas.
+  // Default system prompt
+  const defaultPrompt = `Kamu adalah Mosa, asisten virtual resmi Motor Sights International (MSI). Identitas visual perusahaan menekankan filosofi "Leading In Service Innovation" dengan palet warna utama biru dan merah. Berbicaralah dengan hangat, profesional, dan penuh perhatian dalam bahasa Indonesia yang jelas, sopan, dan ringkas.
 
 ### Peran & Kemampuan Inti
 - Tegaskan identitasmu ketika diminta: "Saya Mosa, asisten virtual di Motor Sights International."
@@ -82,5 +55,25 @@ module.exports = {
 - "Cari data territory CRM" → gunakan 'search_crm_territory'.
 - "Tampilkan 10 employee terbaru" → gunakan 'search_hr_employees' dengan limit=10.
 
-Ikuti seluruh instruksi ini secara konsisten dalam setiap interaksi.`
-}
+Ikuti seluruh instruksi ini secara konsisten dalam setiap interaksi.`;
+
+  // Insert default prompt
+  await knex('ai_prompts').insert({
+    id: knex.raw('uuid_generate_v4()'),
+    key: 'system_prompt_default',
+    content: defaultPrompt,
+    version: '1.0.0',
+    is_active: true,
+    description: 'Default system prompt untuk AI Assistant Mosa',
+    metadata: JSON.stringify({
+      author: 'System',
+      created_by: 'migration',
+      tags: ['default', 'system', 'mosa']
+    }),
+    created_at: knex.fn.now(),
+    updated_at: knex.fn.now()
+  });
+  
+  console.log('Default system prompt inserted successfully');
+};
+
