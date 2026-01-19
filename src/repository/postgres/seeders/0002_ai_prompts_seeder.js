@@ -4,14 +4,6 @@
  */
 
 exports.seed = async function(knex) {
-  // Check if data already exists
-  const existing = await knex('ai_prompts').where({ key: 'system_prompt_default' }).first();
-  
-  if (existing) {
-    console.log('Default system prompt already exists, skipping seed...');
-    return;
-  }
-  
   // Default system prompt
   const defaultPrompt = `Kamu adalah Mosa, asisten virtual resmi Motor Sights International (MSI). Identitas visual perusahaan menekankan filosofi "Leading In Service Innovation" dengan palet warna utama biru dan merah. Berbicaralah dengan hangat, profesional, dan penuh perhatian dalam bahasa Indonesia yang jelas, sopan, dan ringkas.
 
@@ -80,23 +72,67 @@ exports.seed = async function(knex) {
 
 Ikuti seluruh instruksi ini secara konsisten dalam setiap interaksi.`;
 
-  // Insert default prompt
-  await knex('ai_prompts').insert({
-    id: knex.raw('uuid_generate_v4()'),
-    key: 'system_prompt_default',
-    content: defaultPrompt,
-    version: '1.0.0',
-    is_active: true,
-    description: 'Default system prompt untuk AI Assistant Mosa',
-    metadata: JSON.stringify({
-      author: 'System',
-      created_by: 'migration',
-      tags: ['default', 'system', 'mosa']
-    }),
-    created_at: knex.fn.now(),
-    updated_at: knex.fn.now()
-  });
+  // Check if data already exists
+  const existing = await knex('ai_prompts')
+    .where({ key: 'system_prompt_default', deleted_at: null })
+    .orderBy('version', 'desc')
+    .first();
   
-  console.log('Default system prompt inserted successfully');
+  if (existing) {
+    // Get current version and increment
+    const currentVersion = existing.version || '1.0.0';
+    const versionParts = currentVersion.split('.');
+    const major = parseInt(versionParts[0]) || 1;
+    const minor = parseInt(versionParts[1]) || 0;
+    const patch = parseInt(versionParts[2]) || 0;
+    const newVersion = `${major}.${minor + 1}.0`;
+    
+    // Deactivate old version
+    await knex('ai_prompts')
+      .where({ key: 'system_prompt_default', is_active: true, deleted_at: null })
+      .update({
+        is_active: false,
+        updated_at: knex.fn.now()
+      });
+    
+    // Insert new version
+    await knex('ai_prompts').insert({
+      id: knex.raw('uuid_generate_v4()'),
+      key: 'system_prompt_default',
+      content: defaultPrompt,
+      version: newVersion,
+      is_active: true,
+      description: 'Default system prompt untuk AI Assistant Mosa (dengan scope constraint)',
+      metadata: JSON.stringify({
+        author: 'System',
+        created_by: 'seeder',
+        tags: ['default', 'system', 'mosa', 'scope-constraint'],
+        previous_version: currentVersion
+      }),
+      created_at: knex.fn.now(),
+      updated_at: knex.fn.now()
+    });
+    
+    console.log(`Default system prompt updated from version ${currentVersion} to ${newVersion}`);
+  } else {
+    // Insert new prompt
+    await knex('ai_prompts').insert({
+      id: knex.raw('uuid_generate_v4()'),
+      key: 'system_prompt_default',
+      content: defaultPrompt,
+      version: '1.0.0',
+      is_active: true,
+      description: 'Default system prompt untuk AI Assistant Mosa',
+      metadata: JSON.stringify({
+        author: 'System',
+        created_by: 'seeder',
+        tags: ['default', 'system', 'mosa']
+      }),
+      created_at: knex.fn.now(),
+      updated_at: knex.fn.now()
+    });
+    
+    console.log('Default system prompt inserted successfully');
+  }
 };
 
