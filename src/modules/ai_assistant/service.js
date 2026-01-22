@@ -5,6 +5,82 @@ const { Logger } = require('../../utils/logger');
 const logger = Logger;
 const { getConversation, saveConversation } = require('../../utils/redis');
 const { getToolsForLangChain, executeTool } = require('./tools');
+const { getActivePromptByKey } = require('./ai_prompts_repository');
+
+// Cache untuk system prompt (untuk menghindari query berulang)
+let systemPromptCache = {
+  content: null,
+  key: null,
+  timestamp: null,
+  TTL: 5 * 60 * 1000, // 5 menit cache
+};
+
+/**
+ * Get system prompt from database with fallback
+ * @param {string} key - Prompt key (default: 'system_prompt_default')
+ * @returns {Promise<string>} System prompt content
+ */
+const getSystemPrompt = async (key = null) => {
+  const promptKey = key || aiConfig.AI_SYSTEM_PROMPT_KEY;
+  
+  // Check cache first
+  if (
+    systemPromptCache.content &&
+    systemPromptCache.key === promptKey &&
+    systemPromptCache.timestamp &&
+    Date.now() - systemPromptCache.timestamp < systemPromptCache.TTL
+  ) {
+    logger.debug('Using cached system prompt');
+    return systemPromptCache.content;
+  }
+
+  try {
+    // Try to get from database
+    const prompt = await getActivePromptByKey(promptKey);
+    
+    if (prompt && prompt.content) {
+      // Update cache
+      systemPromptCache = {
+        content: prompt.content,
+        key: promptKey,
+        timestamp: Date.now(),
+        TTL: systemPromptCache.TTL,
+      };
+      
+      logger.info(`System prompt loaded from database (key: ${promptKey}, version: ${prompt.version})`);
+      return prompt.content;
+    }
+  } catch (error) {
+    logger.warn(`Failed to load system prompt from database: ${error.message || error}. Using fallback.`);
+  }
+
+  // Fallback to config
+  const fallbackPrompt = aiConfig.AI_SYSTEM_PROMPT_FALLBACK;
+  logger.info('Using fallback system prompt from config');
+  
+  // Update cache with fallback
+  systemPromptCache = {
+    content: fallbackPrompt,
+    key: promptKey,
+    timestamp: Date.now(),
+    TTL: systemPromptCache.TTL,
+  };
+  
+  return fallbackPrompt;
+};
+
+/**
+ * Clear system prompt cache (useful for testing or when prompt is updated)
+ */
+const clearSystemPromptCache = () => {
+  systemPromptCache = {
+    content: null,
+    key: null,
+    timestamp: null,
+    TTL: 5 * 60 * 1000,
+  };
+  logger.info('System prompt cache cleared');
+};
 
 /**
  * Initialize AI model
@@ -64,12 +140,14 @@ const initializeModel = () => {
 
 /**
  * Convert conversation history from Redis to LangChain messages
+ * @param {Array} conversationHistory - Conversation history from Redis
+ * @param {string} systemPrompt - System prompt content
  */
-const convertToLangChainMessages = (conversationHistory) => {
+const convertToLangChainMessages = (conversationHistory, systemPrompt) => {
   const messages = [];
   
   // Add system message
-  messages.push(new SystemMessage(aiConfig.AI_SYSTEM_PROMPT));
+  messages.push(new SystemMessage(systemPrompt));
 
   // Convert conversation history
   if (conversationHistory && Array.isArray(conversationHistory)) {
@@ -222,6 +300,9 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
     // Initialize model
     const model = initializeModel();
 
+    // Get system prompt from database (with fallback)
+    const systemPrompt = await getSystemPrompt();
+
     // Get conversation history (fallback to empty array if Redis not available)
     let conversationHistory = [];
     try {
@@ -231,8 +312,8 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
       conversationHistory = [];
     }
 
-    // Convert to LangChain messages
-    const messages = convertToLangChainMessages(conversationHistory);
+    // Convert to LangChain messages with system prompt from database
+    const messages = convertToLangChainMessages(conversationHistory, systemPrompt);
     messages.push(new HumanMessage(userMessage));
 
     // Prepare model with tools if function calling is enabled
@@ -365,4 +446,6 @@ module.exports = {
   processChat,
   clearConversation,
   initializeModel,
+  getSystemPrompt,
+  clearSystemPromptCache,
 };

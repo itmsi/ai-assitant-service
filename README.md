@@ -1,640 +1,573 @@
-# Express.js API Boilerplate
+# AI Assistant Service
 
-Template lengkap untuk membangun REST API dengan Express.js yang sudah dilengkapi dengan berbagai fitur esensial untuk pengembangan aplikasi production-ready.
+AI Assistant Service untuk Motor Sights International (MSI) yang menggunakan Large Language Model (LLM) dengan function calling untuk mengakses data dari berbagai microservice melalui API Gateway.
 
-## 🚀 Fitur Utama
+## 📋 Table of Contents
 
-- ✅ **Example Module Template**: Module contoh lengkap dengan CRUD, pagination, soft delete, validation
-- ✅ **Database**: PostgreSQL dengan Knex.js untuk query builder, migration, dan seeding
-- ✅ **Authentication Ready**: JWT middleware dan utilities (tinggal implement)
-- ✅ **File Upload**: Integrasi dengan AWS S3 dan MinIO untuk object storage
-- ✅ **Email Service**: Template email dengan Nodemailer
-- ✅ **Message Queue**: RabbitMQ untuk async task processing
-- ✅ **API Documentation**: Swagger/OpenAPI 3.0 dengan contoh lengkap
-- ✅ **Security**: Rate limiting, CORS, input validation, XSS protection
-- ✅ **Monitoring**: Prometheus metrics dan comprehensive logging
-- ✅ **Internationalization**: Multi-language support dengan i18n
-- ✅ **Docker Support**: Docker & Docker Compose untuk development dan production
-- ✅ **CI/CD**: Jenkins & Bitbucket Pipelines configuration
+- [Overview](#-overview)
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Installation & Setup](#-installation--setup)
+- [Configuration](#-configuration)
+- [API Documentation](#-api-documentation)
+- [Available Modules](#-available-modules)
+- [Development Guide](#-development-guide)
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Credits](#-credits)
 
-## 📋 Prerequisites
+## 🎯 Overview
 
-Sebelum memulai, pastikan Anda sudah menginstall:
+AI Assistant Service adalah backend service yang menyediakan kemampuan AI chat untuk mengakses dan memproses data dari berbagai module di sistem MSI. Service ini menggunakan:
 
-- **Node.js** (v14 atau lebih baru)
-- **PostgreSQL** (v12 atau lebih baru)
-- **Redis** (opsional, untuk session storage)
-- **Docker & Docker Compose** (opsional, untuk containerization)
+- **LangChain** untuk integrasi dengan LLM (OpenAI/Sumopod)
+- **Function Calling** untuk memanggil API internal secara dinamis
+- **Redis** untuk menyimpan conversation history
+- **PostgreSQL** untuk menyimpan system prompts
+- **Express.js** sebagai web framework
 
-## 📦 Installation
+### Use Cases
 
-### 1. Clone Repository
+- Query data dari berbagai module (Quotation, CRM, HR, Power BI, dll)
+- Natural language interface untuk sistem MSI
+- Data summarization dan analysis
+- Multi-turn conversation dengan context awareness
 
-```bash
-git clone https://github.com/your-username/express-api-boilerplate.git
-cd express-api-boilerplate
+## ✨ Features
+
+### Core Features
+
+- ✅ **Natural Query Chat**: Pengguna dapat menanyakan pertanyaan dalam bahasa natural (Bahasa Indonesia)
+- ✅ **Contextual Memory**: AI mengingat percakapan dalam sesi chat (disimpan di Redis)
+- ✅ **Function Calling**: AI dapat memanggil fungsi API internal untuk menjawab pertanyaan
+- ✅ **Multi-source Query**: AI dapat menggabungkan data dari beberapa service sekaligus
+- ✅ **Data Summarization**: AI dapat melakukan ringkasan data yang diambil dari API
+- ✅ **User Context via SSO Token**: AI mengenali identitas pengguna lewat JWT/SSO
+- ✅ **Dynamic Prompt Management**: System prompt disimpan di database untuk easy management
+- ✅ **Multiple LLM Support**: Support OpenAI, Sumopod, dan Ollama (future)
+
+### Module Integration
+
+- ✅ **Power BI**: Dashboard, Category, Management
+- ✅ **Quotation**: Manage, Products, Accessory, Term Condition, Customer, Bank Account, Island
+- ✅ **CRM**: Territory, IUP Management, Segmentation, IUP Customers, Transactions, Employee Data Access
+- ✅ **Employee**: Management, Company, Department, Title
+- ✅ **HR**: Candidates, Employees
+- ✅ **eCatalog**: Products
+
+**Total: 22 specialized tools + 1 generic gateway tool**
+
+## 🏗️ Architecture
+
+### Alur Proses (8 Langkah)
+
+```
+User
+ │
+ │  (1) Pertanyaan
+ ▼
+Chat UI / Frontend
+ │
+ │  (2) POST /api/mosa/ai-assistant/chat
+ ▼
+AI Service (Express.js)
+ │
+ │  (3) Kirim prompt + tools
+ ▼
+LLM (OpenAI/Sumopod)
+ │
+ │  (4) Pilih tool + parameter
+ ▼
+AI Service (Express.js)
+ │
+ │  (5) Panggil service domain
+ ▼
+Internal API (SSO / CRM / HR / Quotation)
+ │
+ │  (6) Data JSON
+ ▼
+AI Service (Express.js)
+ │
+ │  (7) Kirim data ke LLM
+ ▼
+LLM (OpenAI/Sumopod)
+ │
+ │  (8) Jawaban natural language
+ ▼
+User
 ```
 
-### 2. Install Dependencies
+### Komponen Utama
+
+1. **Handler** (`src/modules/ai_assistant/handler.js`)
+   - Menerima HTTP request
+   - Validasi input
+   - Extract JWT token
+   - Generate session ID
+
+2. **Service** (`src/modules/ai_assistant/service.js`)
+   - Initialize LLM model
+   - Load system prompt dari database
+   - Process chat dengan function calling
+   - Manage conversation history
+
+3. **Tools** (`src/modules/ai_assistant/tools.js`)
+   - Definisi function tools untuk LLM
+   - Execute API calls ke microservice
+   - Handle error dan response formatting
+
+4. **Repository** (`src/modules/ai_assistant/ai_prompts_repository.js`)
+   - CRUD operations untuk system prompts
+   - Cache management
+
+5. **Config** (`src/config/ai.js`)
+   - Konfigurasi AI model
+   - Environment variables
+   - Fallback prompts
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+
+- Node.js (v14 atau lebih baru)
+- PostgreSQL (v12 atau lebih baru)
+- Redis (untuk conversation history)
+- API Gateway access (untuk akses microservice)
+
+### Step 1: Clone Repository
+
+```bash
+git clone <repository-url>
+cd ai-assistant-service
+```
+
+### Step 2: Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Environment Setup
+### Step 3: Environment Setup
 
-Copy file environment example dan sesuaikan konfigurasi:
+Copy file environment example:
 
 ```bash
 cp environment.example .env
 ```
 
-Edit file `.env` dan sesuaikan dengan konfigurasi Anda:
+Edit file `.env` dan sesuaikan konfigurasi:
 
 ```env
 # Application
-APP_NAME=YourAppName
+APP_NAME=AI Assistant Service
+APP_PORT=9587
 NODE_ENV=development
-PORT=3000
-APP_URL=http://localhost:3000
 
 # Database
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
-DB_PASSWORD=yourpassword
-DB_NAME=yourdbname
+DB_PASSWORD=your_password
+DB_NAME=ai_assistant_db
 
-# JWT
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=24h
+# AI Configuration
+AI_ENABLED=true
+AI_MODEL_PROVIDER=sumopod  # atau 'openai'
+SUMOPOD_API_KEY=sk-sumo-your-api-key
+SUMOPOD_BASE_URL=https://ai.sumopod.com/v1
+SUMOPOD_MODEL=gpt-4o
 
-# AWS S3 (optional)
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=
-AWS_BUCKET=
+# API Gateway
+API_GATEWAY_BASE_URL=https://dev-gateway.motorsights.com
+API_GATEWAY_TIMEOUT=30000
 
-# MinIO (optional)
-MINIO_ENDPOINT=
-MINIO_PORT=
-MINIO_ACCESS_KEY=
-MINIO_SECRET_KEY=
-MINIO_BUCKET=
+# Redis (untuk conversation history)
+REDIS_ENABLED=true
+REDIS_HOST=localhost
+REDIS_PORT=6379
 
-# Email
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USER=
-MAIL_PASSWORD=
-MAIL_FROM=
-
-# RabbitMQ (optional)
-RABBITMQ_URL=amqp://localhost:5672
-
-# Swagger
-SWAGGER_ENABLED=true
+# AI Settings
+AI_MAX_CONVERSATION_HISTORY=10
+AI_ENABLE_FUNCTION_CALLING=true
+AI_ALLOW_WRITE_ACTIONS=false
+AI_SYSTEM_PROMPT_KEY=system_prompt_default
 ```
 
-### 4. Database Setup
-
-Jalankan migration untuk membuat struktur database:
+### Step 4: Database Setup
 
 ```bash
+# Run migrations
 npm run migrate
-```
 
-Jalankan seeder untuk data awal (opsional):
-
-```bash
+# Run seeders (untuk insert default system prompt)
 npm run seed
 ```
 
-### 5. Start Development Server
+### Step 5: Start Redis
 
 ```bash
+# Menggunakan Docker
+docker run -d -p 6379:6379 redis:latest
+
+# Atau install Redis lokal
+# macOS: brew install redis && redis-server
+# Ubuntu: sudo apt-get install redis-server && sudo service redis-server start
+```
+
+### Step 6: Start Server
+
+```bash
+# Development
 npm run dev
+
+# Production
+npm start
 ```
 
-Server akan berjalan di `http://localhost:3000`
+Server akan berjalan di `http://localhost:9587`
 
-Akses dokumentasi API di `http://localhost:3000/documentation`
+## ⚙️ Configuration
 
-## 🏗️ Struktur Proyek
+### AI Model Configuration
 
-```
-├── src/
-│   ├── app.js                  # Express app configuration
-│   ├── server.js              # Server entry point
-│   ├── config/                # Konfigurasi aplikasi
-│   │   ├── database.js        # Database configuration
-│   │   ├── aws.js            # AWS S3 configuration
-│   │   ├── minio.js          # MinIO configuration
-│   │   ├── email.js          # Email configuration
-│   │   ├── rabbitmq.js       # RabbitMQ configuration
-│   │   └── prometheus.js     # Prometheus configuration
-│   ├── modules/               # Business logic modules
-│   │   ├── example/          # 📌 Example module (TEMPLATE)
-│   │   │   ├── handler.js    # Controllers
-│   │   │   ├── postgre_repository.js  # DB operations
-│   │   │   ├── validation.js # Validation rules
-│   │   │   ├── index.js      # Routes
-│   │   │   └── README.md     # Documentation
-│   │   └── helpers/          # Helper functions
-│   ├── middlewares/           # Custom middlewares
-│   │   ├── token.js          # JWT verification
-│   │   ├── validation.js     # Input validation
-│   │   ├── rate-limiter.js   # Rate limiting
-│   │   ├── recaptcha.js      # reCAPTCHA verification
-│   │   └── fileUpload.js     # File upload handling
-│   ├── routes/               # API routes
-│   │   ├── index.js          # Main routes
-│   │   └── V1/               # API version 1
-│   ├── repository/           # Database layer
-│   │   └── postgres/         # PostgreSQL specific
-│   │       ├── migrations/   # Database migrations
-│   │       └── seeders/      # Database seeders
-│   ├── utils/                # Utility functions
-│   │   ├── response.js       # Standard API response
-│   │   ├── logger.js         # Logging utility
-│   │   ├── validation.js     # Validation helpers
-│   │   ├── pagination.js     # Pagination helper
-│   │   └── ...
-│   ├── static/               # Swagger documentation
-│   │   ├── index.js          # Swagger config
-│   │   ├── path/             # API path definitions
-│   │   └── schema/           # Schema definitions
-│   ├── templates/            # Email templates
-│   ├── views/                # View templates
-│   ├── listeners/            # RabbitMQ message listeners
-│   ├── scripts/              # Background scripts
-│   └── debug/                # Debug utilities
-├── docker/                   # Docker configurations
-├── public/                   # Static files
-├── logs/                     # Application logs
-├── uploads/                  # Uploaded files
-├── test/                     # Test files
-├── scripts/                  # Utility scripts
-├── docs/                     # Additional documentation
-├── .env                      # Environment variables (create from .env.example)
-├── package.json              # Dependencies
-├── QUICKSTART.md             # Quick start guide
-├── CONTRIBUTING.md           # Contribution guidelines
-└── README.md                # This file
+**File:** `src/config/ai.js`
+
+**Environment Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AI_ENABLED` | Enable/disable AI | `false` |
+| `AI_MODEL_PROVIDER` | Provider (openai/sumopod/ollama) | `openai` |
+| `SUMOPOD_API_KEY` | API key untuk Sumopod | - |
+| `SUMOPOD_BASE_URL` | Base URL Sumopod | - |
+| `OPENAI_API_KEY` | API key untuk OpenAI | - |
+| `API_GATEWAY_BASE_URL` | Base URL API Gateway | - |
+| `AI_ENABLE_FUNCTION_CALLING` | Enable function calling | `true` |
+| `AI_ALLOW_WRITE_ACTIONS` | Allow write operations | `false` |
+| `AI_MAX_CONVERSATION_HISTORY` | Max conversation history | `10` |
+| `AI_SYSTEM_PROMPT_KEY` | Key untuk system prompt di database | `system_prompt_default` |
+
+### System Prompt Management
+
+System prompt sekarang disimpan di database (tabel `ai_prompts`). Untuk update prompt:
+
+```sql
+UPDATE ai_prompts 
+SET content = 'Prompt baru...',
+    version = '1.1.0',
+    updated_at = NOW()
+WHERE key = 'system_prompt_default' 
+  AND is_active = true;
 ```
 
-## 📝 Cara Membuat Module Baru
+Lihat dokumentasi lengkap di [AI_PROMPTS_DATABASE.md](./AI_PROMPTS_DATABASE.md)
 
-> **💡 Tip:** Gunakan module `example` sebagai template! Copy dan customize sesuai kebutuhan.
+## 📡 API Documentation
 
-### Cara Cepat (Recommended)
+### Base URL
 
+```
+http://localhost:9587/api/mosa/ai-assistant
+```
+
+### Endpoints
+
+#### POST `/chat`
+
+Mengirim pesan ke AI Assistant.
+
+**Headers:**
+```
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "message": "Tampilkan 5 quotation terbaru minggu ini",
+  "sessionId": "optional-session-id"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Chat berhasil diproses",
+  "data": {
+    "message": "Berikut adalah 5 quotation terbaru minggu ini...",
+    "sessionId": "session_f0b57258-5f33-4e03-81f7-cd70d833b5c5",
+    "conversationHistory": [
+      {
+        "role": "user",
+        "content": "Tampilkan 5 quotation terbaru minggu ini",
+        "timestamp": "2025-01-20T10:00:00.000Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Berikut adalah 5 quotation terbaru...",
+        "timestamp": "2025-01-20T10:00:05.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Contoh Request:**
 ```bash
-# Copy module example sebagai template
-cp -r src/modules/example src/modules/products
-
-# Edit files di src/modules/products:
-# - Ganti "example" dengan "product"  
-# - Ganti "examples" dengan "products"
-# - Customize fields sesuai kebutuhan
+curl -X 'POST' \
+  'http://localhost:9587/api/mosa/ai-assistant/chat' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "message": "Tampilkan 5 quotation terbaru minggu ini"
+}'
 ```
 
-### Cara Manual
+#### GET `/history/:sessionId`
 
-### 1. Buat Folder Module
+Mengambil riwayat percakapan berdasarkan session ID.
 
-Buat folder baru di `src/modules/namaModule/`
-
-### 2. Buat File-file Module
-
-Struktur minimal sebuah module:
-
-```
-src/modules/namaModule/
-├── index.js              # Export semua handler
-├── handler.js            # Request handlers
-├── validation.js         # Input validation rules
-└── postgre_repository.js # Database operations
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Riwayat percakapan berhasil diambil",
+  "data": {
+    "sessionId": "session_123",
+    "conversationHistory": [...]
+  }
+}
 ```
 
-#### Contoh `handler.js`:
+#### DELETE `/history/:sessionId`
+
+Menghapus riwayat percakapan berdasarkan session ID.
+
+## 📦 Available Modules
+
+### Power BI Module
+
+- `search_powerbi_dashboard` - Dashboard Power BI
+- `search_powerbi_category` - Kategori Power BI
+- `search_powerbi_manage` - Manajemen Power BI
+
+**Contoh:** "Tampilkan dashboard Power BI yang aktif"
+
+### Quotation Module
+
+- `search_quotations` - Mencari quotation
+- `search_quotation_products` - Produk quotation
+- `search_quotation_accessory` - Aksesori quotation
+- `search_quotation_term_condition` - Term dan condition
+- `search_quotation_customer` - Customer quotation
+- `search_quotation_bank_account` - Bank account
+- `search_quotation_island` - Island data
+
+**Contoh:** "Tampilkan 5 quotation terbaru minggu ini"
+
+### CRM Module
+
+- `search_crm_territory` - Territory management
+- `search_crm_iup_management` - IUP management
+- `search_crm_segmentation` - Segmentasi CRM
+- `search_crm_iup_customers` - IUP customers/contractors
+- `search_crm_transactions` - Transaksi/aktivitas CRM
+- `search_crm_employee_data_access` - Employee data access
+
+**Contoh:** "Cari data IUP management dengan status aktif"
+
+### Employee Module
+
+- `search_hr_employees` - Data karyawan
+- `search_employee_company` - Company employee
+- `search_employee_department` - Department employee
+- `search_employee_title` - Title/jabatan employee
+
+**Contoh:** "Tampilkan 10 employee terbaru"
+
+### HR Module
+
+- `search_hr_candidates` - Kandidat HR
+- `search_hr_employees` - Karyawan HR
+
+**Contoh:** "Tampilkan kandidat terbaru bulan ini"
+
+### eCatalog Module
+
+- `search_ecatalog_products` - Produk eCatalog
+
+**Contoh:** "Cari produk dengan keyword 'engine'"
+
+### Generic Gateway Tool
+
+- `call_gateway_endpoint` - Akses generik ke API Gateway untuk endpoint yang diizinkan
+
+Lihat dokumentasi lengkap di [MODULE_IMPLEMENTATION_SUMMARY.md](./MODULE_IMPLEMENTATION_SUMMARY.md)
+
+## 🛠️ Development Guide
+
+### Menambah Module Baru
+
+1. **Tambahkan endpoint ke `GATEWAY_ALLOWED_PREFIXES`** di `src/modules/ai_assistant/tools.js`
 
 ```javascript
-const repository = require('./postgre_repository');
-const { baseResponse, errorResponse } = require('../../utils/response');
+const GATEWAY_ALLOWED_PREFIXES = [
+  // ... existing endpoints
+  '/api/module-baru',
+  '/api/module-baru/get',
+  '/api/module-baru/create',
+];
+```
 
-const getAll = async (req, res) => {
-  try {
-    const data = await repository.findAll();
-    return baseResponse(res, { data });
-  } catch (error) {
-    return errorResponse(res, error);
-  }
-};
+2. **Buat tool khusus (opsional)** jika perlu logic khusus:
 
-const getById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = await repository.findById(id);
-    
-    if (!data) {
-      return errorResponse(res, { message: 'Data not found' }, 404);
+```javascript
+const searchNewModule = {
+  name: 'search_new_module',
+  description: 'Mencari data dari module baru',
+  parameters: {
+    type: 'object',
+    properties: {
+      search: { type: 'string' },
+      limit: { type: 'number', default: 10 }
     }
-    
-    return baseResponse(res, { data });
-  } catch (error) {
-    return errorResponse(res, error);
+  },
+  execute: async ({ search, limit = 10 }, authToken) => {
+    // Implementation
   }
 };
-
-const create = async (req, res) => {
-  try {
-    const data = await repository.create(req.body);
-    return baseResponse(res, { data }, 201);
-  } catch (error) {
-    return errorResponse(res, error);
-  }
-};
-
-const update = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = await repository.update(id, req.body);
-    return baseResponse(res, { data });
-  } catch (error) {
-    return errorResponse(res, error);
-  }
-};
-
-const remove = async (req, res) => {
-  try {
-    const { id } = req.params;
-    await repository.remove(id);
-    return baseResponse(res, { message: 'Data deleted successfully' });
-  } catch (error) {
-    return errorResponse(res, error);
-  }
-};
-
-module.exports = {
-  getAll,
-  getById,
-  create,
-  update,
-  remove
-};
 ```
 
-#### Contoh `postgre_repository.js`:
+3. **Tambahkan ke `getToolsForLangChain()`** dan `executeTool()`
 
-```javascript
-const db = require('../../config/database');
+4. **Update system prompt** di database jika perlu
 
-const TABLE_NAME = 'your_table_name';
+### Project Structure
 
-const findAll = async () => {
-  return await db(TABLE_NAME)
-    .select('*')
-    .where({ deleted_at: null })
-    .orderBy('created_at', 'desc');
-};
-
-const findById = async (id) => {
-  return await db(TABLE_NAME)
-    .where({ id, deleted_at: null })
-    .first();
-};
-
-const create = async (data) => {
-  const [result] = await db(TABLE_NAME)
-    .insert({
-      ...data,
-      created_at: db.fn.now(),
-      updated_at: db.fn.now()
-    })
-    .returning('*');
-  return result;
-};
-
-const update = async (id, data) => {
-  const [result] = await db(TABLE_NAME)
-    .where({ id })
-    .update({
-      ...data,
-      updated_at: db.fn.now()
-    })
-    .returning('*');
-  return result;
-};
-
-const remove = async (id) => {
-  // Soft delete
-  return await db(TABLE_NAME)
-    .where({ id })
-    .update({
-      deleted_at: db.fn.now()
-    });
-};
-
-module.exports = {
-  findAll,
-  findById,
-  create,
-  update,
-  remove
-};
+```
+src/
+├── modules/
+│   └── ai_assistant/
+│       ├── handler.js              # HTTP handlers
+│       ├── service.js              # AI processing logic
+│       ├── tools.js                 # Function tools definitions
+│       ├── ai_prompts_repository.js # Prompt database operations
+│       └── README.md                # Module documentation
+├── config/
+│   └── ai.js                       # AI configuration
+├── repository/
+│   └── postgres/
+│       ├── migrations/             # Database migrations
+│       └── seeders/                # Database seeders
+└── utils/
+    └── redis.js                    # Redis utilities
 ```
 
-#### Contoh `validation.js`:
-
-```javascript
-const { body, param, query } = require('express-validator');
-
-const createValidation = [
-  body('name')
-    .notEmpty()
-    .withMessage('Name is required')
-    .isLength({ min: 3 })
-    .withMessage('Name must be at least 3 characters'),
-  body('email')
-    .notEmpty()
-    .withMessage('Email is required')
-    .isEmail()
-    .withMessage('Email must be valid'),
-];
-
-const updateValidation = [
-  param('id')
-    .notEmpty()
-    .withMessage('ID is required')
-    .isUUID()
-    .withMessage('ID must be valid UUID'),
-  body('name')
-    .optional()
-    .isLength({ min: 3 })
-    .withMessage('Name must be at least 3 characters'),
-];
-
-module.exports = {
-  createValidation,
-  updateValidation
-};
-```
-
-#### Contoh `index.js`:
-
-```javascript
-const express = require('express');
-const router = express.Router();
-const handler = require('./handler');
-const { createValidation, updateValidation } = require('./validation');
-const { verifyToken } = require('../../middlewares');
-const { handleValidationErrors } = require('../../middlewares/validation');
-
-router.get('/', verifyToken, handler.getAll);
-router.get('/:id', verifyToken, handler.getById);
-router.post('/', verifyToken, createValidation, handleValidationErrors, handler.create);
-router.put('/:id', verifyToken, updateValidation, handleValidationErrors, handler.update);
-router.delete('/:id', verifyToken, handler.remove);
-
-module.exports = router;
-```
-
-### 3. Daftarkan Route
-
-Edit file `src/routes/V1/index.js`:
-
-```javascript
-const yourModule = require('../../modules/yourModule');
-
-// ... existing code ...
-
-routing.use(`${API_TAG}/your-endpoint`, yourModule);
-```
-
-### 4. Buat Migration
-
-Buat file migration untuk table:
+### Available Scripts
 
 ```bash
-npm run migrate:make create_your_table
+npm start              # Start production server
+npm run dev            # Start development server with nodemon
+npm run migrate        # Run database migrations
+npm run migrate:rollback  # Rollback last migration
+npm run migrate:make <name>  # Create new migration
+npm run seed           # Run database seeders
+npm run seed:make <name>  # Create new seeder
+npm test               # Run tests
 ```
 
-Edit file migration di `src/repository/postgres/migrations/`:
+## 🔍 Troubleshooting
 
-```javascript
-exports.up = function(knex) {
-  return knex.schema.createTable('your_table_name', (table) => {
-    table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-    table.string('name').notNullable();
-    table.string('email').unique();
-    table.text('description');
-    table.timestamp('created_at').defaultTo(knex.fn.now());
-    table.timestamp('updated_at').defaultTo(knex.fn.now());
-    table.timestamp('deleted_at').nullable();
-  });
-};
+### Common Issues
 
-exports.down = function(knex) {
-  return knex.schema.dropTable('your_table_name');
-};
+#### 1. Database Connection Error
+
+**Problem:** Error saat connect ke PostgreSQL
+
+**Solution:**
+- Check database credentials di `.env`
+- Pastikan PostgreSQL running
+- Check network/firewall settings
+
+#### 2. Redis Connection Error
+
+**Problem:** Conversation history tidak tersimpan
+
+**Solution:**
+- Check Redis running: `redis-cli ping`
+- Check Redis config di `.env`
+- Service akan tetap berjalan tanpa Redis (tanpa memory)
+
+#### 3. LLM API Error
+
+**Problem:** Error saat memanggil LLM API
+
+**Solution:**
+- Check API key valid
+- Check base URL correct
+- Check network connectivity
+- Check API quota/limits
+
+#### 4. Function Calling Tidak Berfungsi
+
+**Problem:** AI tidak memanggil tools
+
+**Solution:**
+- Check `AI_ENABLE_FUNCTION_CALLING=true` di `.env`
+- Check tools sudah terdaftar di `getToolsForLangChain()`
+- Check logs untuk error details
+
+#### 5. Prompt Tidak Ter-update
+
+**Problem:** Perubahan prompt di database tidak terlihat
+
+**Solution:**
+- Clear cache: `clearSystemPromptCache()` (atau tunggu 5 menit)
+- Check prompt `is_active=true` di database
+- Check `AI_SYSTEM_PROMPT_KEY` sesuai dengan key di database
+
+### Debug Mode
+
+Enable debug logging:
+
+```env
+LOG_LEVEL=debug
+DEBUG_ENABLED=true
 ```
 
-Jalankan migration:
+Check logs di `logs/application/`
 
-```bash
-npm run migrate
-```
+## 📚 Additional Documentation
 
-## 📖 Example API Endpoints
-
-Boilerplate ini sudah include module `example` sebagai template dengan endpoints berikut:
-
-### Get All Examples
-```bash
-GET /api/examples?page=1&limit=10
-```
-
-### Get Example by ID
-```bash
-GET /api/examples/:id
-```
-
-### Create Example
-```bash
-POST /api/examples
-Content-Type: application/json
-
-{
-  "name": "Example Name",
-  "description": "Description",
-  "status": "active"
-}
-```
-
-### Update Example
-```bash
-PUT /api/examples/:id
-Content-Type: application/json
-
-{
-  "name": "Updated Name"
-}
-```
-
-### Delete Example
-```bash
-DELETE /api/examples/:id
-```
-
-### Restore Example
-```bash
-POST /api/examples/:id/restore
-```
-
-> **📚 Full API Documentation:** `http://localhost:3000/documentation`
-
-## 🔐 Authentication (Ready to Implement)
-
-Boilerplate sudah include JWT middleware. Untuk menggunakannya:
-
-### 1. Uncomment di route:
-```javascript
-const { verifyToken } = require('../../middlewares');
-
-router.get('/', verifyToken, handler.getAll);
-```
-
-### 2. Tambahkan header Authorization:
-```bash
-Authorization: Bearer your-jwt-token
-```
-
-> **💡 Tip:** Lihat `src/middlewares/token.js` untuk JWT verification logic
-
-## 📚 API Documentation
-
-Dokumentasi API tersedia via Swagger UI. Akses di:
-
-```
-http://localhost:3000/documentation
-```
-
-Untuk menambahkan dokumentasi API Anda, edit file:
-- `src/static/path/yourModule.js` - untuk endpoint paths
-- `src/static/schema/yourModule.js` - untuk schema definitions
-
-## 🐳 Docker
-
-### Development
-
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
-
-### Production
-
-```bash
-docker-compose -f docker-compose.server.yml up -d
-```
-
-## 📊 Monitoring
-
-### Prometheus Metrics
-
-Metrics tersedia di endpoint:
-
-```
-http://localhost:3000/metrics
-```
-
-### Logs
-
-Log tersimpan di folder `logs/`:
-- `logs/application/` - Application logs
-- `logs/listener/` - RabbitMQ listener logs
-
-## 🧪 Testing
-
-```bash
-npm test
-```
-
-## 🛠️ Available Scripts
-
-- `npm start` - Jalankan server production
-- `npm run dev` - Jalankan server development dengan nodemon
-- `npm run migrate` - Jalankan database migrations
-- `npm run migrate:rollback` - Rollback migration terakhir
-- `npm run migrate:make <name>` - Buat file migration baru
-- `npm run seed` - Jalankan database seeders
-- `npm run seed:make <name>` - Buat file seeder baru
-- `npm run consumer` - Jalankan RabbitMQ consumer
-- `npm test` - Jalankan tests
-
-## 📖 Dependencies
-
-### Core
-
-- **express** - Web framework
-- **pg** - PostgreSQL client
-- **knex** - SQL query builder
-- **jsonwebtoken** - JWT implementation
-- **bcrypt** - Password hashing
-
-### Utilities
-
-- **joi** - Schema validation
-- **express-validator** - Request validation
-- **morgan** - HTTP request logger
-- **winston** - Logging library
-- **moment** - Date manipulation
-- **uuid** - UUID generator
-
-### File Upload
-
-- **multer** - Multipart/form-data handling
-- **aws-sdk** - AWS S3 client
-- **minio** - MinIO client
-- **sharp** - Image processing
-
-### Others
-
-- **swagger-ui-express** - API documentation
-- **prom-client** - Prometheus metrics
-- **amqplib** - RabbitMQ client
-- **nodemailer** - Email sending
-- **i18n** - Internationalization
-- **compression** - Response compression
-- **xss-clean** - XSS protection
-- **express-rate-limit** - Rate limiting
+- [Alur Proses AI Assistant](./ALUR_PROSES_AI_ASSISTANT.md) - Detail alur proses 8 langkah
+- [Module Implementation Summary](./MODULE_IMPLEMENTATION_SUMMARY.md) - Dokumentasi semua module
+- [AI Prompts Database](./AI_PROMPTS_DATABASE.md) - System prompt management
+- [Update Status](./UPDATE_STATUS.md) - Status update implementasi
 
 ## 🤝 Contributing
 
 Contributions are welcome! Silakan buat pull request atau issue untuk saran dan perbaikan.
 
+### Guidelines
+
+1. Fork repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
 ## 📄 License
 
-MIT License - lihat file [LICENSE](LICENSE) untuk detail.
+MIT License - lihat file [LICENSE](./LICENSE) untuk detail.
 
-## 👨‍💻 Author
+## 👨‍💻 Credits
 
-**Your Name**
-
-- GitHub: [@your-username](https://github.com/your-username)
-- Email: your-email@example.com
-
-## 🙏 Acknowledgments
-
-Boilerplate ini dibuat dengan menggabungkan best practices dari berbagai sumber dan pengalaman development.
-
-## 📞 Support
-
-Untuk pertanyaan atau dukungan:
-
-- Buat issue di [GitHub Issues](https://github.com/your-username/express-api-boilerplate/issues)
-- Email: your-email@example.com
+**Developed by [abdulfalaq5](https://github.com/abdulfalaq5)**
 
 ---
 
-Made with ❤️ for the developer community
+Made with ❤️ for Motor Sights International
