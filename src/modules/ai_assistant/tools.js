@@ -363,13 +363,34 @@ const searchHREmployees = {
  */
 const searchQuotations = {
   name: 'search_quotations',
-  description: 'Mencari data quotation berdasarkan nomor, status, atau periode.',
+  description: 'Mencari data quotation/transaksi quotation berdasarkan nomor, status, periode, atau keyword. Gunakan ini untuk pertanyaan tentang transaksi quotation, quotation management, grand total quotation, nama customer quotation, jumlah quotation keseluruhan, dll. Tool ini mengakses endpoint POST /api/quotation/manage-quotation/get. Response dari endpoint berisi data quotation dengan informasi seperti manage_quotation_grand_total (grand total), customer_name (nama customer), quotation_number, status, quotation_for, dan field lainnya. Response juga berisi pagination object dengan struktur: { page, limit, total, totalPages }. Field "total" di dalam pagination menunjukkan jumlah quotation keseluruhan. **PENTING**: Untuk pertanyaan "berapa jumlah quotation yang ada keseluruhan" atau "berapa total quotation" atau "berapa jumlah transaksi quotation", gunakan tool ini dan ambil nilai dari response.data.pagination.total. JANGAN menghitung dari array data (response.data.data atau response.data), karena array data hanya berisi data untuk halaman tertentu (misalnya 10 data untuk page 1), bukan total keseluruhan. Langsung ambil nilai dari response.data.pagination.total saja. Contoh: jika response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }, maka jawabannya adalah 36 dari pagination.total.',
   parameters: {
     type: 'object',
     properties: {
+      search: {
+        type: 'string',
+        description: 'Keyword pencarian quotation (nomor quotation, nama customer, dll)',
+      },
+      page: {
+        type: 'number',
+        description: 'Nomor halaman (default: 1)',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal hasil (default: 10)',
+      },
+      sort_order: {
+        type: 'string',
+        enum: ['asc', 'desc'],
+        description: 'Urutan sorting (default: desc)',
+      },
+      quotation_for: {
+        type: 'string',
+        description: 'Filter quotation_for',
+      },
       quotationNumber: {
         type: 'string',
-        description: 'Nomor quotation untuk pencarian',
+        description: 'Nomor quotation untuk pencarian (alternatif untuk search)',
       },
       status: {
         type: 'string',
@@ -383,20 +404,19 @@ const searchQuotations = {
         type: 'string',
         description: 'Tanggal akhir dalam format YYYY-MM-DD',
       },
-      limit: {
-        type: 'number',
-        description: 'Jumlah maksimal hasil (default: 10)',
-      },
     },
   },
-  execute: async ({ quotationNumber, status, startDate, endDate, limit = 10 }, authToken) => {
+  execute: async ({ search, page = 1, limit = 10, sort_order = 'desc', quotation_for, quotationNumber, status, startDate, endDate }, authToken) => {
     try {
       const payload = cleanObject({
-        quotationNumber,
+        page,
+        limit,
+        sort_order,
+        search: search || quotationNumber || '',
+        quotation_for: quotation_for || '',
         status,
         startDate,
         endDate,
-        limit,
       });
 
       const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');

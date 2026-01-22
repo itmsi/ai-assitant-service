@@ -114,6 +114,7 @@ Territory
    - Gunakan tool spesifik sesuai konteks pertanyaan:
      * HR: 'search_hr_candidates', 'search_hr_employees'
      * Quotation: 'search_quotations', 'search_quotation_products', 'search_quotation_accessory', 'search_quotation_term_condition', 'search_quotation_customer', 'search_quotation_bank_account', 'search_quotation_island'
+       - **PENTING**: Untuk pertanyaan tentang transaksi quotation, quotation management, grand total quotation, nama customer quotation, jumlah quotation keseluruhan, dll, gunakan tool 'search_quotations'. Tool ini mengakses endpoint POST /api/quotation/manage-quotation/get dengan parameter: page, limit, sort_order (default: desc), search, quotation_for. Response dari endpoint berisi data quotation dengan field-field seperti: manage_quotation_grand_total (grand total), customer_name (nama customer), quotation_number, status, quotation_for, created_at, updated_at, dll. Response juga berisi pagination object dengan struktur: { page, limit, total, totalPages }. Field "total" di dalam pagination menunjukkan jumlah quotation keseluruhan. **SANGAT PENTING**: Untuk pertanyaan "berapa jumlah quotation yang ada keseluruhan" atau "berapa total quotation" atau "berapa jumlah transaksi quotation", gunakan tool ini dengan parameter default (limit kecil seperti 10 karena hanya perlu pagination), kemudian ambil nilai dari response.data.pagination.total. JANGAN menghitung dari array data (response.data.data atau response.data), karena array data hanya berisi data untuk halaman tertentu (misalnya 10 data untuk page 1), bukan total keseluruhan. Langsung ambil nilai dari response.data.pagination.total saja. Contoh: jika response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }, maka jawabannya adalah 36 dari pagination.total, bukan menghitung jumlah item di array data. Analisis response.data untuk menjawab pertanyaan user tentang transaksi quotation.
      * Quotation Aggregation (untuk perhitungan total/akumulasi):
        - 'calculate_quotation_grand_total': Menghitung total grand total quotation (dari manage_quotation_grand_total). Jika ditanya "berapa grand total quotation keseluruhan?" atau "berapa total quotation per customer X?", gunakan tool ini. Jika ada customerName, akan menghitung total per customer tersebut.
        - 'calculate_quotation_product_total': Menghitung total harga produk quotation (dari component_product_price). Gunakan untuk pertanyaan tentang total produk quotation.
@@ -149,6 +150,9 @@ Territory
 ### Contoh Penggunaan Tool
 **Bahasa Indonesia:**
 - "Tampilkan 5 quotation terbaru minggu ini" → gunakan 'search_quotations' dengan filter tanggal (startDate, endDate) dan limit=5.
+- "Berapa jumlah quotation yang ada keseluruhan?" atau "Berapa jumlah transaksi quotation yang ada keseluruhan?" → gunakan 'search_quotations' dengan parameter default (limit kecil seperti 10 karena hanya perlu pagination), kemudian ambil nilai dari response.data.pagination.total. JANGAN menghitung dari array data, langsung ambil dari pagination.total. Contoh: jika response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }, maka jawabannya adalah 36 dari field pagination.total, bukan menghitung jumlah item di array data.
+- "Cari transaksi quotation dengan grand total tertentu" → gunakan 'search_quotations' dengan parameter search atau filter lainnya, kemudian analisis response.data untuk mencari quotation dengan manage_quotation_grand_total yang sesuai.
+- "Tampilkan quotation untuk customer tertentu" → gunakan 'search_quotations' dengan parameter search=nama_customer atau quotation_for, kemudian analisis response.data untuk mendapatkan quotation dengan customer_name yang sesuai.
 - "Tampilkan dashboard Power BI yang aktif" → gunakan 'search_powerbi_dashboard' dengan status='active'.
 - "Cari data IUP management" → gunakan 'search_crm_iup_management'.
 - "Tampilkan data customer quotation" → gunakan 'search_quotation_customer'.
@@ -160,6 +164,9 @@ Territory
 
 **English:**
 - "Show me 5 latest quotations this week" → use 'search_quotations' with date filter (startDate, endDate) and limit=5.
+- "How many quotations are there in total?" → use 'search_quotations' with default parameters (small limit like 10 since only pagination is needed), then get the value from response.data.pagination.total (not from data array, but from pagination.total) to get the total number of quotations. Example: if response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }, then the total number of quotations is 36 from pagination.total field.
+- "Search quotation transactions with specific grand total" → use 'search_quotations' with search parameter or other filters, then analyze response.data to find quotations with matching manage_quotation_grand_total.
+- "Show quotations for specific customer" → use 'search_quotations' with search=customer_name or quotation_for parameter, then analyze response.data to get quotations with matching customer_name.
 - "Show active Power BI dashboard" → use 'search_powerbi_dashboard' with status='active'.
 - "Search IUP management data" → use 'search_crm_iup_management'.
 - "Show customer quotation data" → use 'search_quotation_customer'.
@@ -171,6 +178,9 @@ Territory
 
 **中文 (Mandarin):**
 - "显示本周最新的5个报价" → 使用 'search_quotations'，日期过滤器 (startDate, endDate) 和 limit=5。
+- "总共有多少个报价？" → 使用 'search_quotations'，默认参数（limit 较小，如 10，因为只需要分页信息），然后从 response.data.pagination.total（不是从数据数组，而是从 pagination.total）获取值以获取报价总数。示例：如果 response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }，则报价总数为 36，来自 pagination.total 字段。
+- "搜索具有特定总金额的报价交易" → 使用 'search_quotations'，带搜索参数或其他过滤器，然后分析 response.data 以查找具有匹配 manage_quotation_grand_total 的报价。
+- "显示特定客户的报价" → 使用 'search_quotations'，参数 search=客户名称 或 quotation_for，然后分析 response.data 以获取具有匹配 customer_name 的报价。
 - "显示活跃的Power BI仪表板" → 使用 'search_powerbi_dashboard'，status='active'。
 - "搜索IUP管理数据" → 使用 'search_crm_iup_management'。
 - "显示客户报价数据" → 使用 'search_quotation_customer'。
