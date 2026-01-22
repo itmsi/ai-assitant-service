@@ -307,6 +307,11 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
     let conversationHistory = [];
     try {
       conversationHistory = await getConversation(userId, sessionId) || [];
+      if (conversationHistory && conversationHistory.length > 0) {
+        logger.info(`Loaded conversation history: ${conversationHistory.length} messages for userId: ${userId}, sessionId: ${sessionId}`);
+      } else {
+        logger.debug(`No conversation history found for userId: ${userId}, sessionId: ${sessionId} - starting new conversation`);
+      }
     } catch (error) {
       logger.warn(`Failed to get conversation history from Redis, using empty array: ${error.message || error}`);
       conversationHistory = [];

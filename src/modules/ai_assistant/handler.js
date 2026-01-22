@@ -41,10 +41,32 @@ const chat = async (req, res) => {
     let finalSessionId = sessionId;
 
     if (!finalSessionId) {
+      // No sessionId provided - create new session
       if (isAuthenticated) {
         finalSessionId = `session_${userId}`;
       } else {
         finalSessionId = `session_guest_${Date.now()}`;
+      }
+    } else {
+      // SessionId provided - determine userId from sessionId to maintain consistency
+      // This ensures conversation history is retrieved correctly from Redis
+      if (finalSessionId.startsWith('session_guest_')) {
+        // Guest session - always use anonymous userId for consistency
+        // This ensures we can retrieve the conversation history that was saved with userId='anonymous'
+        userId = 'anonymous';
+        isAuthenticated = false;
+        logger.debug(`Using guest session: ${finalSessionId}, userId set to 'anonymous' for consistency`);
+      } else if (finalSessionId.startsWith('session_')) {
+        // Authenticated session - extract userId from sessionId
+        // Format: session_${userId}
+        const extractedUserId = finalSessionId.replace('session_', '');
+        if (extractedUserId && extractedUserId !== 'guest' && !extractedUserId.startsWith('guest_')) {
+          // Use userId from sessionId for consistency
+          // This ensures we can retrieve the conversation history that was saved with this userId
+          userId = extractedUserId;
+          isAuthenticated = true;
+          logger.debug(`Using authenticated session: ${finalSessionId}, userId extracted: ${userId}`);
+        }
       }
     }
 

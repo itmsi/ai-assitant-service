@@ -1,4 +1,4 @@
-const db = require('../../config/database');
+const { pgCore: db } = require('../../config/database');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -70,8 +70,8 @@ const createPrompt = async (data) => {
     const [prompt] = await db(TABLE_NAME)
       .insert({
         ...data,
-        created_at: db.fn.now(),
-        updated_at: db.fn.now(),
+        created_at: db.raw('NOW()'),
+        updated_at: db.raw('NOW()'),
       })
       .returning('*');
     
@@ -94,7 +94,7 @@ const updatePromptByKey = async (key, data) => {
       .where({ key, deleted_at: null })
       .update({
         ...data,
-        updated_at: db.fn.now(),
+        updated_at: db.raw('NOW()'),
       })
       .returning('*');
     
@@ -116,7 +116,7 @@ const deactivatePromptByKey = async (key) => {
       .where({ key, deleted_at: null })
       .update({
         is_active: false,
-        updated_at: db.fn.now(),
+        updated_at: db.raw('NOW()'),
       });
     
     return true;
@@ -136,8 +136,8 @@ const deletePromptByKey = async (key) => {
     await db(TABLE_NAME)
       .where({ key })
       .update({
-        deleted_at: db.fn.now(),
-        updated_at: db.fn.now(),
+        deleted_at: db.raw('NOW()'),
+        updated_at: db.raw('NOW()'),
       });
     
     return true;
