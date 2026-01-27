@@ -363,13 +363,34 @@ const searchHREmployees = {
  */
 const searchQuotations = {
   name: 'search_quotations',
-  description: 'Mencari data quotation berdasarkan nomor, status, atau periode.',
+  description: 'Mencari data quotation/transaksi quotation berdasarkan nomor, status, periode, atau keyword. Gunakan ini untuk pertanyaan tentang transaksi quotation, quotation management, grand total quotation, nama customer quotation, jumlah quotation keseluruhan, dll. Tool ini mengakses endpoint POST /api/quotation/manage-quotation/get. Response dari endpoint berisi data quotation dengan informasi seperti manage_quotation_grand_total (grand total), customer_name (nama customer), quotation_number, status, quotation_for, dan field lainnya. Response juga berisi pagination object dengan struktur: { page, limit, total, totalPages }. Field "total" di dalam pagination menunjukkan jumlah quotation keseluruhan. **PENTING**: Untuk pertanyaan "berapa jumlah quotation yang ada keseluruhan" atau "berapa total quotation" atau "berapa jumlah transaksi quotation", gunakan tool ini dan ambil nilai dari response.data.pagination.total. JANGAN menghitung dari array data (response.data.data atau response.data), karena array data hanya berisi data untuk halaman tertentu (misalnya 10 data untuk page 1), bukan total keseluruhan. Langsung ambil nilai dari response.data.pagination.total saja. Contoh: jika response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }, maka jawabannya adalah 36 dari pagination.total.',
   parameters: {
     type: 'object',
     properties: {
+      search: {
+        type: 'string',
+        description: 'Keyword pencarian quotation (nomor quotation, nama customer, dll)',
+      },
+      page: {
+        type: 'number',
+        description: 'Nomor halaman (default: 1)',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal hasil (default: 10)',
+      },
+      sort_order: {
+        type: 'string',
+        enum: ['asc', 'desc'],
+        description: 'Urutan sorting (default: desc)',
+      },
+      quotation_for: {
+        type: 'string',
+        description: 'Filter quotation_for',
+      },
       quotationNumber: {
         type: 'string',
-        description: 'Nomor quotation untuk pencarian',
+        description: 'Nomor quotation untuk pencarian (alternatif untuk search)',
       },
       status: {
         type: 'string',
@@ -383,20 +404,19 @@ const searchQuotations = {
         type: 'string',
         description: 'Tanggal akhir dalam format YYYY-MM-DD',
       },
-      limit: {
-        type: 'number',
-        description: 'Jumlah maksimal hasil (default: 10)',
-      },
     },
   },
-  execute: async ({ quotationNumber, status, startDate, endDate, limit = 10 }, authToken) => {
+  execute: async ({ search, page = 1, limit = 10, sort_order = 'desc', quotation_for, quotationNumber, status, startDate, endDate }, authToken) => {
     try {
       const payload = cleanObject({
-        quotationNumber,
+        page,
+        limit,
+        sort_order,
+        search: search || quotationNumber || '',
+        quotation_for: quotation_for || '',
         status,
         startDate,
         endDate,
-        limit,
       });
 
       const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
@@ -1188,7 +1208,7 @@ const searchCRMTerritory = {
  */
 const searchCRMIUPManagement = {
   name: 'search_crm_iup_management',
-  description: 'Mencari data IUP (Izin Usaha Pertambangan) management CRM. Gunakan ini untuk pertanyaan tentang IUP dalam CRM.',
+  description: 'Mencari data IUP (Izin Usaha Pertambangan) management CRM. Gunakan ini untuk pertanyaan tentang IUP dalam CRM. Tool ini mengakses endpoint /api/crm/iup_management/get untuk mendapatkan data IUP. Response dari endpoint ini berisi summary statistics seperti total_iup, total_iup_aktif, total_contractor, total_iup_have_contractor, total_iup_no_contractor yang dapat digunakan untuk menjawab pertanyaan tentang jumlah IUP. Untuk pertanyaan "berapa jumlah IUP yang ada", gunakan tool ini dan ambil nilai dari response.data.total_iup atau response.data.total_iup_aktif.',
   parameters: {
     type: 'object',
     properties: {
@@ -1202,11 +1222,11 @@ const searchCRMIUPManagement = {
       },
       limit: {
         type: 'number',
-        description: 'Jumlah maksimal hasil (default: 1000)',
+        description: 'Jumlah maksimal hasil (default: 100)',
       },
       sort_by: {
         type: 'string',
-        description: 'Field untuk sorting (default: updated_at)',
+        description: 'Field untuk sorting (default: created_at)',
       },
       sort_order: {
         type: 'string',
@@ -1219,7 +1239,11 @@ const searchCRMIUPManagement = {
       },
       is_admin: {
         type: 'string',
-        description: 'Filter admin (true/false)',
+        description: 'Filter admin (default: true)',
+      },
+      employee_id: {
+        type: 'string',
+        description: 'ID employee untuk filter',
       },
       segmentation_id: {
         type: 'string',
@@ -1227,17 +1251,18 @@ const searchCRMIUPManagement = {
       },
     },
   },
-  execute: async ({ search, page = 1, limit = 1000, sort_by = 'updated_at', sort_order = 'desc', status, is_admin, segmentation_id }, authToken) => {
+  execute: async ({ search, page = 1, limit = 100, sort_by = 'created_at', sort_order = 'desc', status, is_admin = 'true', employee_id, segmentation_id }, authToken) => {
     try {
       const payload = cleanObject({
         page,
         limit,
         sort_by,
         sort_order,
-        search,
-        status,
-        is_admin,
-        segmentation_id,
+        search: search || '',
+        status: status || '',
+        is_admin: is_admin || 'true',
+        employee_id: employee_id || null,
+        segmentation_id: segmentation_id || null,
       });
 
       const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
@@ -1731,6 +1756,824 @@ const searchEmployeeTitle = {
 };
 
 /**
+ * Tool: Menghitung Grand Total Quotation
+ */
+const calculateQuotationGrandTotal = {
+  name: 'calculate_quotation_grand_total',
+  description: 'Menghitung total grand total dari semua quotation. Gunakan ini untuk pertanyaan tentang total quotation keseluruhan atau per customer. Tool ini akan mengambil data quotation dan menjumlahkan field manage_quotation_grand_total. Jika customerName diberikan, akan menghitung total per customer tersebut.',
+  parameters: {
+    type: 'object',
+    properties: {
+      customerName: {
+        type: 'string',
+        description: 'Nama customer untuk filter (opsional). Jika tidak diberikan, akan menghitung total keseluruhan.',
+      },
+      startDate: {
+        type: 'string',
+        description: 'Tanggal mulai dalam format YYYY-MM-DD (opsional)',
+      },
+      endDate: {
+        type: 'string',
+        description: 'Tanggal akhir dalam format YYYY-MM-DD (opsional)',
+      },
+      status: {
+        type: 'string',
+        description: 'Status quotation untuk filter (opsional)',
+      },
+    },
+  },
+  execute: async ({ customerName, startDate, endDate, status }, authToken) => {
+    try {
+      const payload = cleanObject({
+        customerName,
+        startDate,
+        endDate,
+        status,
+        limit: 10000, // Ambil semua data untuk perhitungan
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/quotation/manage-quotation/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const quotations = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      quotations.forEach((quotation) => {
+        const grandTotal = parseFloat(quotation.manage_quotation_grand_total) || 0;
+        if (!isNaN(grandTotal)) {
+          total += grandTotal;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            customerName,
+            startDate,
+            endDate,
+            status,
+          },
+        },
+        message: `Total grand total quotation: ${total.toLocaleString('id-ID')} (dari ${count} quotation)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation grand total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung grand total quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Total Produk Quotation
+ */
+const calculateQuotationProductTotal = {
+  name: 'calculate_quotation_product_total',
+  description: 'Menghitung total harga produk dari quotation. Gunakan ini untuk pertanyaan tentang total produk quotation. Tool ini akan mengambil data component_product dan menjumlahkan component_product_price.',
+  parameters: {
+    type: 'object',
+    properties: {
+      productName: {
+        type: 'string',
+        description: 'Nama produk untuk filter (opsional). Jika tidak diberikan, akan menghitung total semua produk.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ productName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        search: productName,
+        limit,
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/quotation/componen_product/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const products = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      products.forEach((product) => {
+        const price = parseFloat(product.component_product_price) || 0;
+        if (!isNaN(price)) {
+          total += price;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            productName,
+          },
+        },
+        message: `Total harga produk quotation: ${total.toLocaleString('id-ID')} (dari ${count} produk)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation product total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung total produk quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Total Aksesori Quotation
+ */
+const calculateQuotationAccessoryTotal = {
+  name: 'calculate_quotation_accessory_total',
+  description: 'Menghitung total harga aksesori dari quotation. Gunakan ini untuk pertanyaan tentang total aksesori quotation. Tool ini akan mengambil data accessory dan menjumlahkan component_accessory_price.',
+  parameters: {
+    type: 'object',
+    properties: {
+      accessoryName: {
+        type: 'string',
+        description: 'Nama aksesori untuk filter (opsional). Jika tidak diberikan, akan menghitung total semua aksesori.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ accessoryName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        search: accessoryName,
+        limit,
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/quotation/accessory/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const accessories = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      accessories.forEach((accessory) => {
+        const price = parseFloat(accessory.component_accessory_price) || 0;
+        if (!isNaN(price)) {
+          total += price;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            accessoryName,
+          },
+        },
+        message: `Total harga aksesori quotation: ${total.toLocaleString('id-ID')} (dari ${count} aksesori)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation accessory total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung total aksesori quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Total Term & Condition Quotation
+ */
+const calculateQuotationTermConditionTotal = {
+  name: 'calculate_quotation_term_condition_total',
+  description: 'Menghitung total harga term & condition dari quotation. Gunakan ini untuk pertanyaan tentang total term & condition quotation. Tool ini akan mengambil data term_content dan menjumlahkan component_term_condition_price.',
+  parameters: {
+    type: 'object',
+    properties: {
+      termConditionName: {
+        type: 'string',
+        description: 'Nama term & condition untuk filter (opsional). Jika tidak diberikan, akan menghitung total semua term & condition.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ termConditionName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        search: termConditionName,
+        limit,
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/quotation/term_content/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const termConditions = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      termConditions.forEach((termCondition) => {
+        const price = parseFloat(termCondition.component_term_condition_price) || 0;
+        if (!isNaN(price)) {
+          total += price;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            termConditionName,
+          },
+        },
+        message: `Total harga term & condition quotation: ${total.toLocaleString('id-ID')} (dari ${count} term & condition)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation term condition total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung total term & condition quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Total Customer Quotation
+ */
+const calculateQuotationCustomerTotal = {
+  name: 'calculate_quotation_customer_total',
+  description: 'Menghitung total harga customer dari quotation. Gunakan ini untuk pertanyaan tentang total customer quotation. Tool ini akan mengambil data customer dan menjumlahkan customer_price.',
+  parameters: {
+    type: 'object',
+    properties: {
+      customerName: {
+        type: 'string',
+        description: 'Nama customer untuk filter (opsional). Jika tidak diberikan, akan menghitung total semua customer.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ customerName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        search: customerName,
+        limit,
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/customers/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const customers = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      customers.forEach((customer) => {
+        const price = parseFloat(customer.customer_price) || 0;
+        if (!isNaN(price)) {
+          total += price;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            customerName,
+          },
+        },
+        message: `Total harga customer quotation: ${total.toLocaleString('id-ID')} (dari ${count} customer)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation customer total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung total customer quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Total Bank Account Quotation
+ */
+const calculateQuotationBankAccountTotal = {
+  name: 'calculate_quotation_bank_account_total',
+  description: 'Menghitung total harga bank account dari quotation. Gunakan ini untuk pertanyaan tentang total bank account quotation. Tool ini akan mengambil data bank_account dan menjumlahkan bank_account_price.',
+  parameters: {
+    type: 'object',
+    properties: {
+      bankAccountName: {
+        type: 'string',
+        description: 'Nama bank account untuk filter (opsional). Jika tidak diberikan, akan menghitung total semua bank account.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ bankAccountName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        search: bankAccountName,
+        limit,
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/bank_accounts/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const bankAccounts = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      bankAccounts.forEach((bankAccount) => {
+        const price = parseFloat(bankAccount.bank_account_price) || 0;
+        if (!isNaN(price)) {
+          total += price;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            bankAccountName,
+          },
+        },
+        message: `Total harga bank account quotation: ${total.toLocaleString('id-ID')} (dari ${count} bank account)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation bank account total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung total bank account quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Total Pulau Quotation
+ */
+const calculateQuotationIslandTotal = {
+  name: 'calculate_quotation_island_total',
+  description: 'Menghitung total harga pulau dari quotation. Gunakan ini untuk pertanyaan tentang total pulau quotation. Tool ini akan mengambil data island dan menjumlahkan island_price.',
+  parameters: {
+    type: 'object',
+    properties: {
+      islandName: {
+        type: 'string',
+        description: 'Nama pulau untuk filter (opsional). Jika tidak diberikan, akan menghitung total semua pulau.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ islandName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        search: islandName,
+        limit,
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || aiConfig.MICROSERVICE_QUOTATION_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/island/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const islands = response.data?.data || response.data || [];
+      let total = 0;
+      let count = 0;
+
+      islands.forEach((island) => {
+        const price = parseFloat(island.island_price) || 0;
+        if (!isNaN(price)) {
+          total += price;
+          count++;
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          total: total,
+          count: count,
+          currency: 'IDR',
+          filter: {
+            islandName,
+          },
+        },
+        message: `Total harga pulau quotation: ${total.toLocaleString('id-ID')} (dari ${count} pulau)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating quotation island total: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung total pulau quotation',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Jumlah IUP
+ */
+const calculateIUPCount = {
+  name: 'calculate_iup_count',
+  description: 'Menghitung jumlah IUP berdasarkan filter tertentu. Gunakan ini untuk pertanyaan tentang jumlah IUP, status IUP, atau IUP berdasarkan hierarchy territory (island → group → area → zona). Tool ini akan mengambil data dari iup_management dan menghitung jumlahnya. Filter berdasarkan hierarchy territory: island_name (pulau) → group_name (group, BUKAN segmentasi!) → iup_zone_name (area) → area_name (zona). Segmentation adalah kategori bisnis terpisah (NIKEL, BATUBARA, dll), bukan bagian dari territory hierarchy.',
+  parameters: {
+    type: 'object',
+    properties: {
+      status: {
+        type: 'string',
+        description: 'Status IUP untuk filter (opsional, contoh: aktif, nonaktif)',
+      },
+      islandName: {
+        type: 'string',
+        description: 'Nama pulau untuk filter (opsional). Island adalah level teratas dalam territory hierarchy.',
+      },
+      areaName: {
+        type: 'string',
+        description: 'Nama area (iup_zone_name) untuk filter (opsional). Area adalah bagian dari Group dalam territory hierarchy. Contoh: "MOROWALI", "LAHAT".',
+      },
+      zoneName: {
+        type: 'string',
+        description: 'Nama zona (area_name) untuk filter (opsional). Zona adalah bagian dari Area dalam territory hierarchy. Contoh: "3", "8".',
+      },
+      groupName: {
+        type: 'string',
+        description: 'Nama group untuk filter (opsional). Group adalah bagian dari territory hierarchy (island → group → area → zona), BUKAN segmentasi. Contoh: "G1", "G2", "G3".',
+      },
+      segmentationName: {
+        type: 'string',
+        description: 'Nama segmentasi untuk filter (opsional). Segmentation adalah kategori bisnis terpisah (NIKEL, BATUBARA, EMAS, dll), BUKAN bagian dari territory hierarchy. Beda dengan Group yang merupakan bagian dari territory.',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000)',
+      },
+    },
+  },
+  execute: async ({ status, islandName, areaName, zoneName, groupName, segmentationName, limit = 10000 }, authToken) => {
+    try {
+      const payload = cleanObject({
+        status,
+        limit,
+        sort_by: 'updated_at',
+        sort_order: 'desc',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/crm/iup_management/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      const iups = response.data?.data || response.data || [];
+      let filteredIups = iups;
+
+      // Apply filters
+      if (islandName) {
+        filteredIups = filteredIups.filter((iup) => 
+          iup.island_name && iup.island_name.toUpperCase().includes(islandName.toUpperCase())
+        );
+      }
+      if (areaName) {
+        filteredIups = filteredIups.filter((iup) => 
+          iup.iup_zone_name && iup.iup_zone_name.toUpperCase().includes(areaName.toUpperCase())
+        );
+      }
+      if (zoneName) {
+        filteredIups = filteredIups.filter((iup) => 
+          iup.area_name && iup.area_name.toString().includes(zoneName)
+        );
+      }
+      if (groupName) {
+        filteredIups = filteredIups.filter((iup) => 
+          iup.group_name && iup.group_name.toUpperCase().includes(groupName.toUpperCase())
+        );
+      }
+      if (segmentationName) {
+        filteredIups = filteredIups.filter((iup) => 
+          iup.segmentation_name && iup.segmentation_name.toUpperCase().includes(segmentationName.toUpperCase())
+        );
+      }
+
+      return {
+        success: true,
+        data: {
+          count: filteredIups.length,
+          total: iups.length,
+          filter: {
+            status,
+            islandName,
+            areaName,
+            zoneName,
+            groupName,
+            segmentationName,
+          },
+        },
+        message: `Jumlah IUP: ${filteredIups.length} (dari total ${iups.length} IUP)`,
+      };
+    } catch (error) {
+      logger.error(`Error calculating IUP count: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung jumlah IUP',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: Menghitung Jumlah Contractor
+ */
+const calculateContractorCount = {
+  name: 'calculate_contractor_count',
+  description: 'Menghitung jumlah contractor berdasarkan filter tertentu. Gunakan ini untuk pertanyaan tentang jumlah contractor, contractor berdasarkan hierarchy territory (island → group → area → zona → iup). Tool ini akan mengambil data dari iup_customers dan menghitung jumlahnya berdasarkan island_name, group_name, iup_zone_name (area), area_name (zona), atau iup_name. Filter berdasarkan hierarchy territory: island_name (pulau) → group_name (group, BUKAN segmentasi!) → iup_zone_name (area) → area_name (zona) → iup_name. Contoh: "berapa jumlah contractor di pulau Kalimantan?" → gunakan dengan islandName="KALIMANTAN" atau "Kalimantan".',
+  parameters: {
+    type: 'object',
+    properties: {
+      islandName: {
+        type: 'string',
+        description: 'Nama pulau untuk filter (opsional). Contoh: "KALIMANTAN", "SUMATERA", "JAWA", "SULAWESI". Gunakan uppercase untuk hasil yang lebih akurat.',
+      },
+      iupName: {
+        type: 'string',
+        description: 'Nama IUP untuk filter (opsional). IUP adalah level terbawah dalam territory hierarchy.',
+      },
+      areaName: {
+        type: 'string',
+        description: 'Nama area (iup_zone_name) untuk filter (opsional). Area adalah bagian dari Group dalam territory hierarchy. Contoh: "MOROWALI", "LAHAT".',
+      },
+      zoneName: {
+        type: 'string',
+        description: 'Nama zona (area_name) untuk filter (opsional). Zona adalah bagian dari Area dalam territory hierarchy. Contoh: "3", "8".',
+      },
+      groupName: {
+        type: 'string',
+        description: 'Nama group untuk filter (opsional). Group adalah bagian dari territory hierarchy (island → group → area → zona), BUKAN segmentasi. Contoh: "G1", "G2", "G3".',
+      },
+      segmentationName: {
+        type: 'string',
+        description: 'Nama segmentasi untuk filter (opsional). Segmentation adalah kategori bisnis terpisah (NIKEL, BATUBARA, EMAS, dll), BUKAN bagian dari territory hierarchy. Beda dengan Group yang merupakan bagian dari territory.',
+      },
+      status: {
+        type: 'string',
+        description: 'Status contractor untuk filter (opsional, contoh: active)',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal data yang diambil (default: 10000 untuk memastikan semua data terambil)',
+      },
+    },
+  },
+  execute: async ({ islandName, iupName, areaName, zoneName, groupName, segmentationName, status, limit = 10000 }, authToken) => {
+    try {
+      // Use high limit to ensure we get all data for accurate filtering
+      const requestLimit = limit || 10000;
+      
+      const payload = cleanObject({
+        page: 1,
+        limit: requestLimit,
+        sort_order: 'desc',
+        search: '',
+        mine_type: '',
+        status: status || '',
+        is_admin: 'true',
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/crm/iup_customers/get')}`;
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      // Handle response structure: { success: true, data: [...], pagination: { total: ... } }
+      const responseData = response.data?.data || response.data || [];
+      const pagination = response.data?.pagination || {};
+      const totalFromPagination = pagination.total || null;
+
+      // Convert to array if needed
+      const contractors = Array.isArray(responseData) ? responseData : [];
+      logger.debug(`Retrieved ${contractors.length} contractors from API, total from pagination: ${totalFromPagination}`);
+      
+      let filteredContractors = contractors;
+
+      // Apply filters on client-side (since API might not support all filters)
+      if (islandName) {
+        const islandNameUpper = islandName.toUpperCase().trim();
+        const beforeFilter = filteredContractors.length;
+        filteredContractors = filteredContractors.filter((contractor) => {
+          const contractorIsland = contractor.island_name ? contractor.island_name.toUpperCase().trim() : '';
+          // Exact match untuk hasil yang akurat (misalnya "KALIMANTAN" harus exact match dengan "KALIMANTAN")
+          return contractorIsland === islandNameUpper;
+        });
+        logger.debug(`Filtered by islandName "${islandName}": ${beforeFilter} -> ${filteredContractors.length} contractors`);
+      }
+      if (iupName) {
+        filteredContractors = filteredContractors.filter((contractor) => 
+          contractor.iup_name && contractor.iup_name.toUpperCase().includes(iupName.toUpperCase())
+        );
+      }
+      if (areaName) {
+        filteredContractors = filteredContractors.filter((contractor) => 
+          contractor.iup_zone_name && contractor.iup_zone_name.toUpperCase().includes(areaName.toUpperCase())
+        );
+      }
+      if (zoneName) {
+        filteredContractors = filteredContractors.filter((contractor) => 
+          contractor.area_name && contractor.area_name.toString().includes(zoneName)
+        );
+      }
+      if (groupName) {
+        filteredContractors = filteredContractors.filter((contractor) => 
+          contractor.group_name && contractor.group_name.toUpperCase().includes(groupName.toUpperCase())
+        );
+      }
+      if (segmentationName) {
+        filteredContractors = filteredContractors.filter((contractor) => 
+          contractor.segmentation_name_en && contractor.segmentation_name_en.toUpperCase().includes(segmentationName.toUpperCase())
+        );
+      }
+
+      // Calculate filtered count
+      const filteredCount = filteredContractors.length;
+      const totalCount = totalFromPagination !== null ? totalFromPagination : contractors.length;
+
+      // Build message based on filters
+      let message = '';
+      if (islandName || iupName || areaName || zoneName || groupName || segmentationName || status) {
+        // If filtering by island, provide clear message
+        if (islandName) {
+          message = `Jumlah contractor di pulau ${islandName}: ${filteredCount}`;
+          if (totalFromPagination !== null) {
+            message += ` (dari total ${totalCount} contractor di seluruh sistem)`;
+          }
+        } else {
+          message = `Jumlah contractor dengan filter yang diberikan: ${filteredCount}`;
+          if (totalFromPagination !== null) {
+            message += ` (dari total ${totalCount} contractor di sistem)`;
+          }
+        }
+      } else {
+        message = `Jumlah contractor: ${totalCount}`;
+      }
+
+      return {
+        success: true,
+        data: {
+          count: filteredCount,
+          total: totalCount,
+          totalFromPagination: totalFromPagination,
+          filter: {
+            islandName,
+            iupName,
+            areaName,
+            zoneName,
+            groupName,
+            segmentationName,
+            status,
+          },
+        },
+        message: message,
+      };
+    } catch (error) {
+      logger.error(`Error calculating contractor count: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal menghitung jumlah contractor',
+      };
+    }
+  },
+};
+
+/**
  * Convert tools to LangChain format
  */
 const getToolsForLangChain = () => {
@@ -1931,6 +2774,80 @@ const getToolsForLangChain = () => {
         parameters: searchEmployeeTitle.parameters,
       },
     },
+    // Quotation Aggregation Tools
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationGrandTotal.name,
+        description: calculateQuotationGrandTotal.description,
+        parameters: calculateQuotationGrandTotal.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationProductTotal.name,
+        description: calculateQuotationProductTotal.description,
+        parameters: calculateQuotationProductTotal.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationAccessoryTotal.name,
+        description: calculateQuotationAccessoryTotal.description,
+        parameters: calculateQuotationAccessoryTotal.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationTermConditionTotal.name,
+        description: calculateQuotationTermConditionTotal.description,
+        parameters: calculateQuotationTermConditionTotal.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationCustomerTotal.name,
+        description: calculateQuotationCustomerTotal.description,
+        parameters: calculateQuotationCustomerTotal.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationBankAccountTotal.name,
+        description: calculateQuotationBankAccountTotal.description,
+        parameters: calculateQuotationBankAccountTotal.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateQuotationIslandTotal.name,
+        description: calculateQuotationIslandTotal.description,
+        parameters: calculateQuotationIslandTotal.parameters,
+      },
+    },
+    // CRM Aggregation Tools
+    {
+      type: 'function',
+      function: {
+        name: calculateIUPCount.name,
+        description: calculateIUPCount.description,
+        parameters: calculateIUPCount.parameters,
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: calculateContractorCount.name,
+        description: calculateContractorCount.description,
+        parameters: calculateContractorCount.parameters,
+      },
+    },
   ];
 };
 
@@ -1967,6 +2884,17 @@ const executeTool = async (toolName, parameters, authToken) => {
     [searchEmployeeCompany.name]: searchEmployeeCompany,
     [searchEmployeeDepartment.name]: searchEmployeeDepartment,
     [searchEmployeeTitle.name]: searchEmployeeTitle,
+    // Quotation Aggregation Tools
+    [calculateQuotationGrandTotal.name]: calculateQuotationGrandTotal,
+    [calculateQuotationProductTotal.name]: calculateQuotationProductTotal,
+    [calculateQuotationAccessoryTotal.name]: calculateQuotationAccessoryTotal,
+    [calculateQuotationTermConditionTotal.name]: calculateQuotationTermConditionTotal,
+    [calculateQuotationCustomerTotal.name]: calculateQuotationCustomerTotal,
+    [calculateQuotationBankAccountTotal.name]: calculateQuotationBankAccountTotal,
+    [calculateQuotationIslandTotal.name]: calculateQuotationIslandTotal,
+    // CRM Aggregation Tools
+    [calculateIUPCount.name]: calculateIUPCount,
+    [calculateContractorCount.name]: calculateContractorCount,
   };
 
   const tool = tools[toolName];
@@ -2125,4 +3053,15 @@ module.exports = {
   searchEmployeeCompany,
   searchEmployeeDepartment,
   searchEmployeeTitle,
+  // Quotation Aggregation Tools
+  calculateQuotationGrandTotal,
+  calculateQuotationProductTotal,
+  calculateQuotationAccessoryTotal,
+  calculateQuotationTermConditionTotal,
+  calculateQuotationCustomerTotal,
+  calculateQuotationBankAccountTotal,
+  calculateQuotationIslandTotal,
+  // CRM Aggregation Tools
+  calculateIUPCount,
+  calculateContractorCount,
 };
