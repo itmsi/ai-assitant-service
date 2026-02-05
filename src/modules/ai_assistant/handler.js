@@ -10,7 +10,7 @@ const jwtDecode = require('jwt-decode');
  */
 const chat = async (req, res) => {
   try {
-    const { message, sessionId, system } = req.body;
+    const { message, sessionId, system, employee_id } = req.body;
 
     // Validation
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -35,6 +35,13 @@ const chat = async (req, res) => {
       } catch (error) {
         logger.warn('Invalid JWT token, using anonymous user');
       }
+    }
+
+    // Override userId if employee_id is provided in payload (for saving to database)
+    if (employee_id) {
+      userId = employee_id;
+      // Also consider user as authenticated if employee_id is explicitly provided
+      isAuthenticated = true;
     }
 
     // Generate session ID if not provided
