@@ -18,14 +18,28 @@ const aiAssistantPaths = {
               simpleMessage: {
                 summary: 'Kirim pesan tanpa sessionId',
                 value: {
-                  message: 'Tampilkan 5 quotation terbaru minggu ini'
+                  message: 'Tampilkan 5 quotation terbaru minggu ini',
+                  system: [
+                    "CRM",
+                    "User Management",
+                    "Quotation",
+                    "ROA ROE Calculate",
+                    "Power BI"
+                  ]
                 }
               },
               customSession: {
                 summary: 'Kirim pesan dengan sessionId khusus',
                 value: {
                   message: 'Lanjutkan percakapan sebelumnya',
-                  sessionId: 'session_custom_001'
+                  sessionId: 'session_custom_001',
+                  system: [
+                    "CRM",
+                    "User Management",
+                    "Quotation",
+                    "ROA ROE Calculate",
+                    "Power BI"
+                  ]
                 }
               }
             }

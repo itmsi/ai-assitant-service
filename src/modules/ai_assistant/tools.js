@@ -2351,27 +2351,27 @@ const calculateIUPCount = {
 
       // Apply filters
       if (islandName) {
-        filteredIups = filteredIups.filter((iup) => 
+        filteredIups = filteredIups.filter((iup) =>
           iup.island_name && iup.island_name.toUpperCase().includes(islandName.toUpperCase())
         );
       }
       if (areaName) {
-        filteredIups = filteredIups.filter((iup) => 
+        filteredIups = filteredIups.filter((iup) =>
           iup.iup_zone_name && iup.iup_zone_name.toUpperCase().includes(areaName.toUpperCase())
         );
       }
       if (zoneName) {
-        filteredIups = filteredIups.filter((iup) => 
+        filteredIups = filteredIups.filter((iup) =>
           iup.area_name && iup.area_name.toString().includes(zoneName)
         );
       }
       if (groupName) {
-        filteredIups = filteredIups.filter((iup) => 
+        filteredIups = filteredIups.filter((iup) =>
           iup.group_name && iup.group_name.toUpperCase().includes(groupName.toUpperCase())
         );
       }
       if (segmentationName) {
-        filteredIups = filteredIups.filter((iup) => 
+        filteredIups = filteredIups.filter((iup) =>
           iup.segmentation_name && iup.segmentation_name.toUpperCase().includes(segmentationName.toUpperCase())
         );
       }
@@ -2450,7 +2450,7 @@ const calculateContractorCount = {
     try {
       // Use high limit to ensure we get all data for accurate filtering
       const requestLimit = limit || 10000;
-      
+
       const payload = cleanObject({
         page: 1,
         limit: requestLimit,
@@ -2481,7 +2481,7 @@ const calculateContractorCount = {
       // Convert to array if needed
       const contractors = Array.isArray(responseData) ? responseData : [];
       logger.debug(`Retrieved ${contractors.length} contractors from API, total from pagination: ${totalFromPagination}`);
-      
+
       let filteredContractors = contractors;
 
       // Apply filters on client-side (since API might not support all filters)
@@ -2496,27 +2496,27 @@ const calculateContractorCount = {
         logger.debug(`Filtered by islandName "${islandName}": ${beforeFilter} -> ${filteredContractors.length} contractors`);
       }
       if (iupName) {
-        filteredContractors = filteredContractors.filter((contractor) => 
+        filteredContractors = filteredContractors.filter((contractor) =>
           contractor.iup_name && contractor.iup_name.toUpperCase().includes(iupName.toUpperCase())
         );
       }
       if (areaName) {
-        filteredContractors = filteredContractors.filter((contractor) => 
+        filteredContractors = filteredContractors.filter((contractor) =>
           contractor.iup_zone_name && contractor.iup_zone_name.toUpperCase().includes(areaName.toUpperCase())
         );
       }
       if (zoneName) {
-        filteredContractors = filteredContractors.filter((contractor) => 
+        filteredContractors = filteredContractors.filter((contractor) =>
           contractor.area_name && contractor.area_name.toString().includes(zoneName)
         );
       }
       if (groupName) {
-        filteredContractors = filteredContractors.filter((contractor) => 
+        filteredContractors = filteredContractors.filter((contractor) =>
           contractor.group_name && contractor.group_name.toUpperCase().includes(groupName.toUpperCase())
         );
       }
       if (segmentationName) {
-        filteredContractors = filteredContractors.filter((contractor) => 
+        filteredContractors = filteredContractors.filter((contractor) =>
           contractor.segmentation_name_en && contractor.segmentation_name_en.toUpperCase().includes(segmentationName.toUpperCase())
         );
       }
@@ -2573,11 +2573,15 @@ const calculateContractorCount = {
   },
 };
 
+// TOOL_MODULE_MAP moved to end of file to ensure all tools are defined
+
+
 /**
  * Convert tools to LangChain format
+ * @param {Array<string>} allowedModules - List of allowed modules. If null/undefined, all tools are allowed.
  */
-const getToolsForLangChain = () => {
-  return [
+const getToolsForLangChain = (allowedModules) => {
+  const allTools = [
     {
       type: 'function',
       function: {
@@ -2849,6 +2853,30 @@ const getToolsForLangChain = () => {
       },
     },
   ];
+
+  // If allowedModules is not provided (undefined/null), allow all tools (Backward Compatibility)
+  if (allowedModules === undefined || allowedModules === null) {
+    return allTools;
+  }
+
+  // If allowedModules is provided (even if empty array), strict filtering applies
+  return allTools.filter(tool => {
+    const toolName = tool.function.name;
+    const allowedMap = TOOL_MODULE_MAP[toolName];
+
+    // Always allow GLOBAL tools (like summarize_data)
+    if (allowedMap && allowedMap.includes('GLOBAL')) {
+      return true;
+    }
+
+    // If tool is not mapped, block it in strict mode for safety
+    if (!allowedMap) {
+      return false;
+    }
+
+    // Check if user has access to any of the required modules for this tool
+    return allowedMap.some(module => allowedModules.includes(module));
+  });
 };
 
 /**
@@ -3020,6 +3048,60 @@ const callGatewayEndpoint = {
       };
     }
   },
+};
+
+/**
+ * Tool to Module Mapping
+ * Maps tool names to the modules that authorize them.
+ * 'GLOBAL' means the tool is always available.
+ */
+const TOOL_MODULE_MAP = {
+  // HR / User Management
+  [searchHRCandidates.name]: ['User Management', 'HR'],
+  [searchHREmployees.name]: ['User Management', 'HR'],
+  [searchEmployeeCompany.name]: ['User Management', 'HR'],
+  [searchEmployeeDepartment.name]: ['User Management', 'HR'],
+  [searchEmployeeTitle.name]: ['User Management', 'HR'],
+
+  // Quotation
+  [searchQuotations.name]: ['Quotation'],
+  [searchQuotationProducts.name]: ['Quotation'],
+  [searchQuotationAccessory.name]: ['Quotation'],
+  [searchQuotationTermCondition.name]: ['Quotation'],
+  [searchQuotationCustomer.name]: ['Quotation'],
+  [searchQuotationBankAccount.name]: ['Quotation'],
+  [searchQuotationIsland.name]: ['Quotation'],
+  [calculateQuotationGrandTotal.name]: ['Quotation'],
+  [calculateQuotationProductTotal.name]: ['Quotation'],
+  [calculateQuotationAccessoryTotal.name]: ['Quotation'],
+  [calculateQuotationTermConditionTotal.name]: ['Quotation'],
+  [calculateQuotationCustomerTotal.name]: ['Quotation'],
+  [calculateQuotationBankAccountTotal.name]: ['Quotation'],
+  [calculateQuotationIslandTotal.name]: ['Quotation'],
+
+  // Power BI
+  [searchPowerBIDashboard.name]: ['Power BI'],
+  [searchPowerBICategory.name]: ['Power BI'],
+  [searchPowerBIManage.name]: ['Power BI'],
+
+  // CRM
+  [searchCRMTerritory.name]: ['CRM'],
+  [searchCRMIUPManagement.name]: ['CRM'],
+  [searchCRMSegmentation.name]: ['CRM'],
+  [searchCRMIUPCustomers.name]: ['CRM'],
+  [searchCRMTransactions.name]: ['CRM'],
+  [searchCRMEmployeeDataAccess.name]: ['CRM'],
+  [calculateIUPCount.name]: ['CRM'],
+  [calculateContractorCount.name]: ['CRM'],
+
+  // eCatalog
+  [searchECatalogProducts.name]: ['eCatalog', 'Product'],
+
+  // General (Always allowed)
+  [summarizeData.name]: ['GLOBAL'],
+
+  // Gateway (Dangerous in strict mode - only allow if System is explicitly granted or unrestricted)
+  [callGatewayEndpoint.name]: ['System'],
 };
 
 module.exports = {

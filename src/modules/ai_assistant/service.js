@@ -22,7 +22,7 @@ let systemPromptCache = {
  */
 const getSystemPrompt = async (key = null) => {
   const promptKey = key || aiConfig.AI_SYSTEM_PROMPT_KEY;
-  
+
   // Check cache first
   if (
     systemPromptCache.content &&
@@ -37,7 +37,7 @@ const getSystemPrompt = async (key = null) => {
   try {
     // Try to get from database
     const prompt = await getActivePromptByKey(promptKey);
-    
+
     if (prompt && prompt.content) {
       // Update cache
       systemPromptCache = {
@@ -46,7 +46,7 @@ const getSystemPrompt = async (key = null) => {
         timestamp: Date.now(),
         TTL: systemPromptCache.TTL,
       };
-      
+
       logger.info(`System prompt loaded from database (key: ${promptKey}, version: ${prompt.version})`);
       return prompt.content;
     }
@@ -57,7 +57,7 @@ const getSystemPrompt = async (key = null) => {
   // Fallback to config
   const fallbackPrompt = aiConfig.AI_SYSTEM_PROMPT_FALLBACK;
   logger.info('Using fallback system prompt from config');
-  
+
   // Update cache with fallback
   systemPromptCache = {
     content: fallbackPrompt,
@@ -65,7 +65,7 @@ const getSystemPrompt = async (key = null) => {
     timestamp: Date.now(),
     TTL: systemPromptCache.TTL,
   };
-  
+
   return fallbackPrompt;
 };
 
@@ -145,7 +145,7 @@ const initializeModel = () => {
  */
 const convertToLangChainMessages = (conversationHistory, systemPrompt) => {
   const messages = [];
-  
+
   // Add system message
   messages.push(new SystemMessage(systemPrompt));
 
@@ -205,9 +205,9 @@ const normalizeToolCall = (toolCall, index = 0) => {
         || toolCall.additional_kwargs?.function_call?.name,
       args: parseToolArguments(
         toolCall.args
-          || toolCall.function?.arguments
-          || toolCall.additional_kwargs?.function_call?.arguments
-          || toolCall.arguments
+        || toolCall.function?.arguments
+        || toolCall.additional_kwargs?.function_call?.arguments
+        || toolCall.arguments
       ),
     };
   }
@@ -220,9 +220,9 @@ const normalizeToolCall = (toolCall, index = 0) => {
       || toolCall.additional_kwargs?.function_call?.name,
     args: parseToolArguments(
       toolCall.args
-        || toolCall.function?.arguments
-        || toolCall.additional_kwargs?.function_call?.arguments
-        || toolCall.arguments
+      || toolCall.function?.arguments
+      || toolCall.additional_kwargs?.function_call?.arguments
+      || toolCall.arguments
     ),
   };
 };
@@ -295,13 +295,19 @@ const getMessageContent = (message) => {
 /**
  * Process AI chat with function calling support
  */
-const processChat = async (userMessage, userId, sessionId, authToken) => {
+const processChat = async (userMessage, userId, sessionId, authToken, allowedModules) => {
   try {
     // Initialize model
     const model = initializeModel();
 
     // Get system prompt from database (with fallback)
-    const systemPrompt = await getSystemPrompt();
+    let systemPrompt = await getSystemPrompt();
+
+    // Append allowed modules instruction if provided (even if empty array)
+    if (Array.isArray(allowedModules)) {
+      const modulesList = allowedModules.join(', ');
+      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${modulesList}].\nYou are PROHIBITED from providing any data, information, or assistance related to modules NOT in this list.\n\nIf the user's request involves a restricted module (e.g., asking for 'Quotation' data when 'Quotation' is not listed above, or 'Worker' when 'HR' is not listed), you must REFUSE immediately.\n\nRefusal Response:\n"Mohon maaf, Anda tidak memiliki hak akses untuk module tersebut."\n\nDo not explain why (other than the standard refusal). Do not apologize profusely. Do not offer alternatives. STOP and return the refusal response.`;
+    }
 
     // Get conversation history (fallback to empty array if Redis not available)
     let conversationHistory = [];
@@ -324,9 +330,9 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
     // Prepare model with tools if function calling is enabled
     let modelToUse = model;
     let tools = [];
-    
+
     if (aiConfig.AI_ENABLE_FUNCTION_CALLING) {
-      tools = getToolsForLangChain();
+      tools = getToolsForLangChain(allowedModules);
       // Convert tools to format compatible with ChatOpenAI
       // For LangChain 0.1.x, we pass tools in bind or use .bind()
       try {
@@ -370,7 +376,7 @@ const processChat = async (userMessage, userId, sessionId, authToken) => {
           messages.push(toolMessage);
         } catch (error) {
           logger.error(`Error executing tool ${toolCall.name}: ${error.message || error}`);
-          
+
           // Create ToolMessage with error
           const toolMessage = new ToolMessage({
             content: JSON.stringify({

@@ -31,6 +31,17 @@ const aiAssistantSchemas = {
         description: 'Pesan atau pertanyaan user',
         example: 'Tampilkan 5 quotation terbaru minggu ini'
       },
+      system: {
+        type: 'array',
+        description: 'Opsional. Array berisi nama-nama modul yang akan digunakan oleh AI Assistant',
+        example: [
+          "CRM",
+          "User Management",
+          "Quotation",
+          "ROA ROE Calculate",
+          "Power BI"
+        ]
+      },
       sessionId: {
         type: 'string',
         description: 'Opsional. Jika tidak diisi, backend otomatis membuat session berdasarkan identitas pengguna',
@@ -38,7 +49,14 @@ const aiAssistantSchemas = {
       }
     },
     example: {
-      message: 'Tampilkan 5 quotation terbaru minggu ini'
+      message: 'Tampilkan 5 quotation terbaru minggu ini',
+      system: [
+        "CRM",
+        "User Management",
+        "Quotation",
+        "ROA ROE Calculate",
+        "Power BI"
+      ]
     }
   },
   AiChatResponseData: {
