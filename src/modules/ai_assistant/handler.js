@@ -10,7 +10,7 @@ const jwtDecode = require('jwt-decode');
  */
 const chat = async (req, res) => {
   try {
-    const { message, sessionId } = req.body;
+    const { message, sessionId, system } = req.body;
 
     // Validation
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -75,7 +75,8 @@ const chat = async (req, res) => {
       message.trim(),
       userId,
       finalSessionId,
-      authToken
+      authToken,
+      system // Pass system modules access list (undefined if not provided)
     );
 
     return baseResponseGeneral(res, {
@@ -168,8 +169,12 @@ const clearHistory = async (req, res) => {
       }
     }
 
-    // Clear conversation
+    // Clear conversation from Redis (if enabled)
     await clearConversation(userId, sessionId);
+
+    // Also clear from database
+    const conversationRepo = require('./ai_conversations_repository');
+    await conversationRepo.deleteConversation(sessionId);
 
     return baseResponseGeneral(res, {
       success: true,

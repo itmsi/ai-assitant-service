@@ -3,6 +3,9 @@ const redisConfig = require('../config/redis');
 const { Logger } = require('./logger');
 const logger = Logger;
 
+// Import database repository for conversation storage
+const conversationRepo = require('../modules/ai_assistant/ai_conversations_repository');
+
 let redisClient = null;
 
 /**
@@ -57,67 +60,39 @@ const getRedisClient = () => {
 
 /**
  * Store conversation history
+ * Now uses database instead of Redis
  */
 const saveConversation = async (userId, sessionId, messages) => {
-  const client = getRedisClient();
-  if (!client) {
-    return false;
-  }
-
-  try {
-    const key = `${redisConfig.KEY_PREFIX.AI_CONVERSATION}${userId}:${sessionId}`;
-    await client.setex(key, redisConfig.TTL.CONVERSATION, JSON.stringify(messages));
-    return true;
-  } catch (error) {
-    logger.error(`Error saving conversation: ${error.message || error}`);
-    return false;
-  }
+  // Use database repository for conversation storage
+  return await conversationRepo.saveConversation(sessionId, userId, messages);
 };
 
 /**
  * Get conversation history
+ * Now uses database instead of Redis
  */
 const getConversation = async (userId, sessionId) => {
-  const client = getRedisClient();
-  if (!client) {
-    return null;
-  }
-
-  try {
-    const key = `${redisConfig.KEY_PREFIX.AI_CONVERSATION}${userId}:${sessionId}`;
-    const data = await client.get(key);
-    return data ? JSON.parse(data) : null;
-  } catch (error) {
-    logger.error(`Error getting conversation: ${error.message || error}`);
-    return null;
-  }
+  // Use database repository for conversation retrieval
+  return await conversationRepo.getConversation(sessionId);
 };
 
 /**
  * Delete conversation history
+ * Now uses database instead of Redis
  */
 const deleteConversation = async (userId, sessionId) => {
-  const client = getRedisClient();
-  if (!client) {
-    return false;
-  }
-
-  try {
-    const key = `${redisConfig.KEY_PREFIX.AI_CONVERSATION}${userId}:${sessionId}`;
-    await client.del(key);
-    return true;
-  } catch (error) {
-    logger.error(`Error deleting conversation: ${error.message || error}`);
-    return false;
-  }
+  // Use database repository for conversation deletion
+  return await conversationRepo.deleteConversation(sessionId);
 };
 
 /**
  * Store user memory (long-term context)
+ * Still uses Redis if enabled, otherwise skip
  */
 const saveMemory = async (userId, key, value) => {
   const client = getRedisClient();
   if (!client) {
+    logger.warn('Redis not available, skipping memory save');
     return false;
   }
 
@@ -133,6 +108,7 @@ const saveMemory = async (userId, key, value) => {
 
 /**
  * Get user memory
+ * Still uses Redis if enabled
  */
 const getMemory = async (userId, key) => {
   const client = getRedisClient();
@@ -160,6 +136,9 @@ const closeRedis = async () => {
     logger.info('Redis connection closed');
   }
 };
+
+// Log conversation storage method on startup
+logger.info('Conversation storage: Using PostgreSQL database');
 
 module.exports = {
   initRedis,
