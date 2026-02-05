@@ -426,12 +426,21 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
       conversationHistory = conversationHistory.slice(-aiConfig.AI_MAX_CONVERSATION_HISTORY * 2);
     }
 
-    // Save conversation history (ignore error if Redis not available)
+    // Save conversation history to Redis (if available)
     try {
       await saveConversation(userId, sessionId, conversationHistory);
     } catch (error) {
       logger.warn(`Failed to save conversation history to Redis: ${error.message || error}`);
-      // Continue without saving - conversation will still work but without memory
+      // Continue without saving to Redis
+    }
+
+    // Also save to database for persistence
+    try {
+      const conversationRepo = require('./ai_conversations_repository');
+      await conversationRepo.saveConversation(sessionId, userId, conversationHistory);
+    } catch (error) {
+      logger.warn(`Failed to save conversation history to database: ${error.message || error}`);
+      // Continue without saving to database
     }
 
     return {

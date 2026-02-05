@@ -169,8 +169,12 @@ const clearHistory = async (req, res) => {
       }
     }
 
-    // Clear conversation
+    // Clear conversation from Redis (if enabled)
     await clearConversation(userId, sessionId);
+
+    // Also clear from database
+    const conversationRepo = require('./ai_conversations_repository');
+    await conversationRepo.deleteConversation(sessionId);
 
     return baseResponseGeneral(res, {
       success: true,
