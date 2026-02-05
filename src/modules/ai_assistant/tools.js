@@ -1073,7 +1073,7 @@ const searchQuotationBankAccount = {
  */
 const searchQuotationIsland = {
   name: 'search_quotation_island',
-  description: 'Mencari data pulau (island) untuk quotation. Gunakan ini untuk pertanyaan tentang pulau yang terkait dengan quotation.',
+  description: 'Mencari data pulau (island) KHUSUS untuk keperluan Quotation. JANGAN gunakan tool ini jika user bertanya tentang Island dalam konteks CRM atau module lain. Hanya gunakan jika konteksnya adalah Quotation.',
   parameters: {
     type: 'object',
     properties: {
@@ -1578,6 +1578,80 @@ const searchCRMEmployeeDataAccess = {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Gagal mengambil data employee data access CRM',
+      };
+    }
+  },
+};
+
+/**
+ * Tool: CRM Island
+ */
+const searchCRMIsland = {
+  name: 'search_crm_island',
+  description: 'Mencari data island dari CRM. Gunakan ini untuk pertanyaan tentang island di dalam CRM.',
+  parameters: {
+    type: 'object',
+    properties: {
+      search: {
+        type: 'string',
+        description: 'Keyword pencarian island',
+      },
+      page: {
+        type: 'number',
+        description: 'Nomor halaman (default: 1)',
+      },
+      limit: {
+        type: 'number',
+        description: 'Jumlah maksimal hasil (default: 100)',
+      },
+      sort_by: {
+        type: 'string',
+        description: 'Field untuk sorting (default: created_at)',
+      },
+      sort_order: {
+        type: 'string',
+        enum: ['asc', 'desc'],
+        description: 'Urutan sorting (default: desc)',
+      },
+    },
+  },
+  execute: async ({ search, page = 1, limit = 100, sort_by = 'created_at', sort_order = 'desc' }, authToken) => {
+    try {
+      const payload = cleanObject({
+        page,
+        limit,
+        sort_order,
+        sort_by,
+        search,
+      });
+
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
+      const endpoint = `${baseUrl}${sanitizePath('/api/crm/island/get')}`;
+
+      // Handle direct gateway call or through crm prefix if needed, but based on user request it's /api/crm/island/get
+      // Check ALLOWED_PREFIXES in tools.js: /api/island is allowed, but user request has /api/crm/island/get
+      // Let's assume the user knows best about the path.
+
+      const response = await axios.post(
+        endpoint,
+        payload || {},
+        {
+          headers: getDefaultHeaders(authToken),
+          timeout: aiConfig.API_GATEWAY_TIMEOUT,
+        }
+      );
+
+      return {
+        success: true,
+        data: response.data,
+        message: 'Data island CRM berhasil diambil',
+      };
+    } catch (error) {
+      logger.error(`Error fetching CRM island: ${error.message || error}`);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Gagal mengambil data island CRM',
       };
     }
   },
@@ -2753,6 +2827,14 @@ const getToolsForLangChain = (allowedModules) => {
         parameters: searchCRMEmployeeDataAccess.parameters,
       },
     },
+    {
+      type: 'function',
+      function: {
+        name: searchCRMIsland.name,
+        description: searchCRMIsland.description,
+        parameters: searchCRMIsland.parameters,
+      },
+    },
     // Employee Tools
     {
       type: 'function',
@@ -2908,6 +2990,7 @@ const executeTool = async (toolName, parameters, authToken) => {
     [searchCRMIUPCustomers.name]: searchCRMIUPCustomers,
     [searchCRMTransactions.name]: searchCRMTransactions,
     [searchCRMEmployeeDataAccess.name]: searchCRMEmployeeDataAccess,
+    [searchCRMIsland.name]: searchCRMIsland,
     // Employee Tools
     [searchEmployeeCompany.name]: searchEmployeeCompany,
     [searchEmployeeDepartment.name]: searchEmployeeDepartment,
@@ -3091,6 +3174,7 @@ const TOOL_MODULE_MAP = {
   [searchCRMIUPCustomers.name]: ['CRM'],
   [searchCRMTransactions.name]: ['CRM'],
   [searchCRMEmployeeDataAccess.name]: ['CRM'],
+  [searchCRMIsland.name]: ['CRM'],
   [calculateIUPCount.name]: ['CRM'],
   [calculateContractorCount.name]: ['CRM'],
 
@@ -3131,6 +3215,7 @@ module.exports = {
   searchCRMIUPCustomers,
   searchCRMTransactions,
   searchCRMEmployeeDataAccess,
+  searchCRMIsland,
   // Employee Tools
   searchEmployeeCompany,
   searchEmployeeDepartment,
