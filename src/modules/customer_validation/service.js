@@ -3,6 +3,7 @@ const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const aiConfig = require('../../config/ai');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
+const axios = require('axios');
 const { pgCore } = require('../../config/database');
 const { setupDblink, executeDblinkQueryWithRetry } = require('../../utils/dblink');
 
@@ -68,26 +69,20 @@ const getCustomersFromAPI = async (authHeader) => {
     while (hasMoreData) {
       logger.info(`[CUSTOMER_VALIDATION] Fetching page ${page} with limit ${limit}...`);
 
-      const response = await fetch(url, {
-        method: 'POST',
+      const response = await axios.post(url, {
+        page: page,
+        limit: limit,
+        sort_by: "created_at",
+        sort_order: "desc"
+      }, {
         headers: {
           'accept': 'application/json',
           'Authorization': authHeader,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          page: page,
-          limit: limit,
-          sort_by: "created_at",
-          sort_order: "desc"
-        })
+        }
       });
 
-      if (!response.ok) {
-        throw new Error(`API returned status ${response.status}`);
-      }
-
-      const json = await response.json();
+      const json = response.data;
 
       let listData = [];
       if (json && json.data && Array.isArray(json.data.data)) {
