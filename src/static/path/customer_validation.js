@@ -8,6 +8,11 @@ const customerValidationPaths = {
       tags: ['Customer Validation'],
       summary: 'Validate duplicate customer names',
       description: 'Validasi duplikat nama customer dengan membandingkan dengan data yang sudah ada di database menggunakan AI',
+      security: [
+        {
+          bearerAuth: []
+        }
+      ],
       requestBody: {
         required: true,
         content: {
@@ -34,6 +39,14 @@ const customerValidationPaths = {
         },
         400: {
           description: 'Validation error',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+            }
+          }
+        },
+        401: {
+          description: 'Unauthorized - Missing or Invalid Bearer Token',
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ErrorResponse' }
