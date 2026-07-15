@@ -59,6 +59,44 @@ services:
           memory: 512M
           cpus: '0.25'
 
+  ai-assistant:
+    container_name: ai-assistant-service
+    image: ai-assistant-service
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ai
+    env_file:
+      - .env
+    restart: unless-stopped
+    ports:
+      - "9588:9588"
+    environment:
+      - NODE_ENV=production
+      - AI_ASSISTANT_PORT=9588
+      # Redis akan dikoneksikan ke network infra_net
+      # - REDIS_HOST=redis-service  # Uncomment jika Redis di container lain
+      # APM disable
+      - ELASTIC_APM_ACTIVE=false
+      - ELASTIC_APM_DISABLED=true
+    networks:
+      - infra_net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9588/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
 networks:
   infra_net:
     external: true  # PENTING! Gunakan network yang sudah ada
