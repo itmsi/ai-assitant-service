@@ -55,7 +55,7 @@ const clientsStore = {
       client_secret: clientSecret,
       client_id_issued_at: Math.floor(Date.now() / 1000),
       client_name: client.client_name || 'Registered Client',
-      redirect_uris: client.redirect_uris || ['http://localhost:9588/callback'],
+      redirect_uris: client.redirect_uris ,
       grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
       response_types: client.response_types || ['code'],
       token_endpoint_auth_method: client.token_endpoint_auth_method || 'client_secret_post',
@@ -154,14 +154,15 @@ const generateAccessToken = (clientId, scopes) => {
 // =============================================
 const createOAuthRouter = () => {
   const PORT = process.env.AI_ASSISTANT_PORT || 9588;
+  const BASE_URL = process.env.MCP_BASE_URL || `http://localhost:${PORT}`;
   const SSO_URL = process.env.SSO_SERVER_URL || `http://localhost:${PORT}`;
 
   return mcpAuthRouter({
     provider,
     issuerUrl: new URL(SSO_URL),
-    baseUrl: new URL(`http://localhost:${PORT}`),
-    resourceServerUrl: new URL(`http://localhost:${PORT}/api/mosa/ai-assistant/mcp`),
-    serviceDocumentationUrl: new URL(`http://localhost:${PORT}/`),
+    baseUrl: new URL(BASE_URL),
+    resourceServerUrl: new URL(`${BASE_URL}/api/mosa/ai-assistant/mcp`),
+    serviceDocumentationUrl: new URL(`${BASE_URL}/`),
     scopesSupported: ['openid', 'profile', 'email'],
     resourceName: 'MSI AI Assistant MCP',
   });
@@ -172,12 +173,13 @@ const createOAuthRouter = () => {
 // =============================================
 const getClientCredentials = () => {
   const PORT = process.env.AI_ASSISTANT_PORT || 9588;
+  const BASE_URL = process.env.MCP_BASE_URL || `http://localhost:${PORT}`;
   const SSO_URL = process.env.SSO_SERVER_URL || `http://localhost:${PORT}`;
 
   return {
     client_id: process.env.MCP_CLIENT_ID,
     client_secret: process.env.MCP_CLIENT_SECRET,
-    metadata_url: `http://localhost:${PORT}/.well-known/oauth-authorization-server`,
+    metadata_url: `${BASE_URL}/.well-known/oauth-authorization-server`,
     issuer: SSO_URL,
     token_endpoint: `${SSO_URL}/api/v1/auth/sso/token`,
     authorization_endpoint: `${SSO_URL}/api/v1/auth/sso/authorize`,
