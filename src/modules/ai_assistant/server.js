@@ -21,6 +21,9 @@ const { login: ssoLogin } = require('./middleware/sso-auth');
 const PORT = process.env.AI_ASSISTANT_PORT || 9588;
 const app = express();
 
+// Trust proxy (nginx/cloudflare di belakang)
+app.set('trust proxy', 1);
+
 // =============================================
 // SSO Auto-Login (startup)
 // =============================================
