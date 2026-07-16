@@ -53,10 +53,7 @@ app.use((req, res, next) => {
 });
 
 // =============================================
-// OAuth Endpoints (WAJIB di root level!)
-// - .well-known/oauth-authorization-server
-// - .well-known/oauth-protected-resource/...
-// - /authorize, /token, /register, /revoke
+// OAuth Endpoints (.well-known, authorize, token)
 // =============================================
 const oauthRouter = createOAuthRouter();
 app.use(oauthRouter);
@@ -71,7 +68,7 @@ app.get('/health', (req, res) => {
     status: 'running',
     timestamp: new Date().toISOString(),
     port: PORT,
-    mode: 'REST + MCP + OAuth',
+    mode: 'REST + MCP (auto-login)',
   });
 });
 
@@ -84,8 +81,6 @@ app.get('/', (req, res) => {
       history: 'GET /api/mosa/ai-assistant/history/:sessionId',
       clearHistory: 'DELETE /api/mosa/ai-assistant/history/:sessionId',
       mcp: 'POST /api/mosa/ai-assistant/mcp',
-      oauth: 'GET /.well-known/oauth-authorization-server',
-      register: 'POST /register',
       health: 'GET /health',
     },
   });

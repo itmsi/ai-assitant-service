@@ -17,38 +17,21 @@ const { z } = require('zod');
 const { executeTool, getToolsForLangChain } = require('./tools');
 const { processChat } = require('./service');
 const { optionalSSOToken } = require('./middleware/sso');
+const { getToken } = require('./middleware/sso-auth');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
-// Global MCP Server & Transport (init once)
-let mcpServer = null;
-let mcpTransport = null;
-let initialized = false;
-
 /**
- * Initialize MCP Server dan Transport (dipanggil sekali)
+ * Create MCP Server dengan tools
  */
-const ensureInitialized = async () => {
-  if (initialized) return;
-
-  mcpTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => require('crypto').randomUUID(),
-  });
-
-  mcpServer = new McpServer(
+const createServer = () => {
+  const server = new McpServer(
     { name: 'MSI AI Assistant MCP', version: '1.0.0' },
     { capabilities: { tools: {}, logging: {} } }
   );
-
-  registerTools(mcpServer);
-  registerChatTool(mcpServer);
-
-  await mcpServer.connect(mcpTransport);
-
-  mcpTransport.onclose = () => logger.info('MCP transport closed');
-
-  initialized = true;
-  logger.info('MCP Server initialized');
+  registerTools(server);
+  registerChatTool(server);
+  return server;
 };
 
 /**
@@ -136,20 +119,41 @@ const convertToZodSchema = (parameters) => {
 // Express Router
 // =============================================
 
-/**
- * Handle MCP HTTP request (POST /mcp)
- */
+// Sessions cache
+const sessions = new Map();
+
 const handleMCPRequest = async (req, res) => {
   try {
-    await ensureInitialized();
+    const sessionId = req.headers['mcp-session-id'];
+    let session;
 
-    // Set auth info untuk StreamableHTTP transport
-    req.auth = { token: req.authToken, user: req.user };
+    if (sessionId && sessions.has(sessionId)) {
+      session = sessions.get(sessionId);
+    } else {
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => require('crypto').randomUUID(),
+      });
+      const server = new McpServer(
+        { name: 'MSI AI Assistant MCP', version: '1.0.0' },
+        { capabilities: { tools: {}, logging: {} } }
+      );
+      registerTools(server);
+      registerChatTool(server);
+      await server.connect(transport);
+      transport.onclose = () => sessions.delete(transport.sessionId);
+      session = { transport, server };
+    }
 
-    // Delegate ke transport
-    await mcpTransport.handleRequest(req, res, req.body);
+    // Pakai SSO token dari auto-login
+    req.auth = { token: getToken(), user: req.user };
+
+    await session.transport.handleRequest(req, res, req.body);
+
+    if (session.transport.sessionId && !sessionId) {
+      sessions.set(session.transport.sessionId, session);
+    }
   } catch (error) {
-    logger.error(`MCP request error: ${error.message}`);
+    logger.error(`MCP error: ${error.message}`);
     if (!res.headersSent) {
       res.status(500).json({ success: false, message: `MCP error: ${error.message}` });
     }
@@ -162,12 +166,7 @@ const handleMCPRequest = async (req, res) => {
 const getMCPRouter = () => {
   const express = require('express');
   const router = express.Router();
-
-  // GET /mcp - SSE stream (untuk server-initiated messages)
-  // POST /mcp - JSON-RPC messages
-  // Keduanya wajib SSO token
   router.all('/', optionalSSOToken, handleMCPRequest);
-
   return router;
 };
 
