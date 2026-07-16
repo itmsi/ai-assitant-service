@@ -2,7 +2,7 @@
  * AI Assistant - Standalone Server
  * 
  * Menjalankan modul AI Assistant sebagai service mandiri
- * dengan port sendiri, terpisah dari main Express API.
+ * dengan port sendiri.
  * 
  * Usage:
  *   npm run dev:ai    (development)
@@ -14,6 +14,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const aiAssistantRoutes = require('./index');
+const { getMCPRouter } = require('./mcp');
+const { createOAuthRouter } = require('./oauth');
 
 const PORT = process.env.AI_ASSISTANT_PORT || 9588;
 const app = express();
@@ -32,6 +34,15 @@ app.use((req, res, next) => {
 });
 
 // =============================================
+// OAuth Endpoints (WAJIB di root level!)
+// - .well-known/oauth-authorization-server
+// - .well-known/oauth-protected-resource/...
+// - /authorize, /token, /register, /revoke
+// =============================================
+const oauthRouter = createOAuthRouter();
+app.use(oauthRouter);
+
+// =============================================
 // Health Check
 // =============================================
 app.get('/health', (req, res) => {
@@ -41,6 +52,7 @@ app.get('/health', (req, res) => {
     status: 'running',
     timestamp: new Date().toISOString(),
     port: PORT,
+    mode: 'REST + MCP + OAuth',
   });
 });
 
@@ -52,15 +64,23 @@ app.get('/', (req, res) => {
       chat: 'POST /api/mosa/ai-assistant/chat',
       history: 'GET /api/mosa/ai-assistant/history/:sessionId',
       clearHistory: 'DELETE /api/mosa/ai-assistant/history/:sessionId',
+      mcp: 'POST /api/mosa/ai-assistant/mcp',
+      oauth: 'GET /.well-known/oauth-authorization-server',
+      register: 'POST /register',
       health: 'GET /health',
     },
   });
 });
 
 // =============================================
-// AI Assistant Routes
+// AI Assistant REST Routes
 // =============================================
 app.use('/api/mosa/ai-assistant', aiAssistantRoutes);
+
+// =============================================
+// MCP Endpoint (Streamable HTTP)
+// =============================================
+app.use('/api/mosa/ai-assistant/mcp', getMCPRouter());
 
 // =============================================
 // 404 Handler
@@ -106,9 +126,11 @@ app.listen(PORT, () => {
   console.log(`║  Port    : ${PORT}                              `);
   console.log(`║  Mode    : ${process.env.NODE_ENV || 'development'}                        `);
   console.log(`║  Provider: ${process.env.AI_MODEL_PROVIDER || 'openai'}                        `);
+  console.log(`║  SSO     : ${process.env.SSO_SERVER_URL || 'localhost:9518'}          `);
   console.log('╚══════════════════════════════════════════════╝');
   console.log(`🚀 AI Assistant running at http://localhost:${PORT}`);
   console.log(`📚 Health check: http://localhost:${PORT}/health`);
+  console.log(`🤖 MCP endpoint: http://localhost:${PORT}/api/mosa/ai-assistant/mcp`);
 });
 
 // =============================================

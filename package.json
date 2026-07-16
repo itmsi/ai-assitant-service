@@ -29,6 +29,7 @@
   "dependencies": {
     "@langchain/openai": "^0.0.20",
     "@langchain/redis": "^0.0.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "amqplib": "^0.10.7",
     "aws-sdk": "^2.1180.0",
     "axios": "^1.2.2",

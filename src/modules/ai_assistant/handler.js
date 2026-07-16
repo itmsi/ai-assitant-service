@@ -3,14 +3,22 @@ const { processChat, clearConversation } = require('./service');
 const { getConversation } = require('../../utils/redis');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
-const jwtDecode = require('jwt-decode');
+
+/**
+ * Helper: extract userId dari req.user (dari SSO middleware)
+ */
+const getUserId = (req) => {
+  if (!req.user) return 'anonymous';
+  return req.user.sub || req.user.userId || req.user.id || req.user.employee_id || req.user.username || 'anonymous';
+};
 
 /**
  * Chat endpoint - menerima pesan dari user dan mengembalikan response dari AI
  */
 const chat = async (req, res) => {
   try {
-    const { message, sessionId, system, employee_id } = req.body;
+    const { message, sessionId, system } = req.body;
+    const employee_id = req.body.employee_id || getUserId(req);
 
     // Validation
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -20,43 +28,21 @@ const chat = async (req, res) => {
       });
     }
 
-    // Get user info from JWT token
-    let userId = 'anonymous';
-    let authToken = null;
-    let isAuthenticated = false;
-
-    if (req.headers.authorization) {
-      try {
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwtDecode(token);
-        userId = decoded.sub || decoded.userId || decoded.id || 'anonymous';
-        authToken = token;
-        isAuthenticated = userId !== 'anonymous';
-      } catch (error) {
-        logger.warn('Invalid JWT token, using anonymous user');
-      }
-    }
-
-    // Override userId if employee_id is provided in payload (for saving to database)
-    if (employee_id) {
-      userId = employee_id;
-      // Also consider user as authenticated if employee_id is explicitly provided
-      isAuthenticated = true;
-    }
+    // User info dari SSO middleware (req.user di-set oleh requireSSOToken/optionalSSOToken)
+    const userId = employee_id || getUserId(req);
+    const authToken = req.authToken || null;
+    const isAuthenticated = req.isAuthenticated || false;
 
     // Generate session ID if not provided
     let finalSessionId = sessionId;
 
     if (!finalSessionId) {
-      // No sessionId provided - create new session
       if (isAuthenticated) {
         finalSessionId = `session_${userId}`;
       } else {
         finalSessionId = `session_guest_${Date.now()}`;
       }
     }
-    // If sessionId provided, use it as-is and keep userId from JWT
-    // This allows authenticated users to continue guest sessions after login
 
     // Process chat
     const result = await processChat(
@@ -99,17 +85,7 @@ const getHistory = async (req, res) => {
       });
     }
 
-    // Get user info from JWT token
-    let userId = 'anonymous';
-    if (req.headers.authorization) {
-      try {
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwtDecode(token);
-        userId = decoded.sub || decoded.userId || decoded.id || 'anonymous';
-      } catch (error) {
-        logger.warn('Invalid JWT token, using anonymous user');
-      }
-    }
+    const userId = getUserId(req);
 
     // Get conversation history
     const history = await getConversation(userId, sessionId);
@@ -145,17 +121,7 @@ const clearHistory = async (req, res) => {
       });
     }
 
-    // Get user info from JWT token
-    let userId = 'anonymous';
-    if (req.headers.authorization) {
-      try {
-        const token = req.headers.authorization.split(' ')[1];
-        const decoded = jwtDecode(token);
-        userId = decoded.sub || decoded.userId || decoded.id || 'anonymous';
-      } catch (error) {
-        logger.warn('Invalid JWT token, using anonymous user');
-      }
-    }
+    const userId = getUserId(req);
 
     // Clear conversation from Redis (if enabled)
     await clearConversation(userId, sessionId);
