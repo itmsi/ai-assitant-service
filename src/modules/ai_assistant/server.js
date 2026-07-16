@@ -16,9 +16,25 @@ const cors = require('cors');
 const aiAssistantRoutes = require('./index');
 const { getMCPRouter } = require('./mcp');
 const { createOAuthRouter } = require('./oauth');
+const { login: ssoLogin } = require('./middleware/sso-auth');
 
 const PORT = process.env.AI_ASSISTANT_PORT || 9588;
 const app = express();
+
+// =============================================
+// SSO Auto-Login (startup)
+// =============================================
+if (process.env.SSO_USERNAME && process.env.SSO_PASSWORD) {
+  ssoLogin().then((token) => {
+    if (token) {
+      console.log(`[SSO] Auto-login berhasil, token: ${token.substring(0, 20)}...`);
+    } else {
+      console.warn('[SSO] Auto-login gagal. Request tanpa token akan tetap jalan.');
+    }
+  });
+} else {
+  console.log('[SSO] Auto-login tidak dikonfigurasi (SSO_USERNAME/SSO_PASSWORD)');
+}
 
 // =============================================
 // Middleware

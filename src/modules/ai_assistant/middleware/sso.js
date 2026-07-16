@@ -10,6 +10,7 @@ const axios = require('axios');
 const jwtDecode = require('jwt-decode');
 const { Logger } = require('../../../utils/logger');
 const logger = Logger;
+const { getToken, isLoggedIn } = require('./sso-auth');
 
 const SSO_USERINFO_URL = process.env.SSO_SERVER_USERINFO_URL || 'http://localhost:9518/api/v1/auth/sso/userinfo';
 const SSO_TIMEOUT = parseInt(process.env.SSO_TIMEOUT || '10000');
@@ -83,17 +84,22 @@ const decodeJWT = (token) => {
 
 /**
  * SSO Token Middleware
- * Wajib memiliki Bearer token di header Authorization.
- * Token diverifikasi ke SSO server, fallback ke JWT decode.
+ * Wajib memiliki Bearer token. Fallback ke auto-login token jika tidak ada.
  */
 const requireSSOToken = async (req, res, next) => {
   try {
-    const token = extractToken(req);
-    
+    let token = extractToken(req);
+
+    // Fallback ke auto-login token kalo gak ada dari client
+    if (!token && isLoggedIn()) {
+      token = getToken();
+      logger.info('Menggunakan token dari auto-login SSO');
+    }
+
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'SSO token diperlukan. Kirim Authorization: Bearer <token>',
+        message: 'SSO token diperlukan. Isi SSO_USERNAME & SSO_PASSWORD di .env untuk auto-login.',
       });
     }
 
@@ -147,12 +153,18 @@ const requireSSOToken = async (req, res, next) => {
 
 /**
  * SSO Token Middleware (Optional)
- * Jika tidak ada token, tetap lanjut sebagai anonymous user.
+ * Jika tidak ada token dari client, coba auto-login token.
  */
 const optionalSSOToken = async (req, res, next) => {
   try {
-    const token = extractToken(req);
-    
+    let token = extractToken(req);
+
+    // Fallback ke auto-login token
+    if (!token && isLoggedIn()) {
+      token = getToken();
+      logger.info('Menggunakan token dari auto-login SSO (optional)');
+    }
+
     if (!token) {
       req.user = null;
       req.authToken = null;
