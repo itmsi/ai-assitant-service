@@ -167,8 +167,7 @@ const generateTokens = (clientId, scopes) => {
     sub: clientId, 
     client_id: clientId, 
     scope: scopes.join(' '), 
-    iat: now, 
-    exp: now + 3600 
+    iat: now
   })).toString('base64url');
   const secret = process.env.JWT_SECRET || 'dev-jwt-secret-key';
   const signature = Buffer.from(crypto.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url')).toString('base64url');
@@ -176,7 +175,7 @@ const generateTokens = (clientId, scopes) => {
   return {
     access_token: accessToken,
     token_type: 'bearer',
-    expires_in: 3600,
+    expires_in: 9999999999,
     scope: scopes.join(' '),
   };
 };
