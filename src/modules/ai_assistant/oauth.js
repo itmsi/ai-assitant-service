@@ -159,13 +159,26 @@ const provider = {
   },
 };
 
-const generateAccessToken = (clientId, scopes) => {
+const generateTokens = (clientId, scopes) => {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(JSON.stringify({ sub: clientId, client_id: clientId, scope: scopes.join(' '), iat: now, exp: now + 3600 })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ 
+    iss: process.env.MCP_BASE_URL || `http://localhost:${process.env.AI_ASSISTANT_PORT || 9588}`,
+    sub: clientId, 
+    client_id: clientId, 
+    scope: scopes.join(' '), 
+    iat: now, 
+    exp: now + 3600 
+  })).toString('base64url');
   const secret = process.env.JWT_SECRET || 'dev-jwt-secret-key';
   const signature = Buffer.from(crypto.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url')).toString('base64url');
-  return `${header}.${payload}.${signature}`;
+  const accessToken = `${header}.${payload}.${signature}`;
+  return {
+    access_token: accessToken,
+    token_type: 'bearer',
+    expires_in: 3600,
+    scope: scopes.join(' '),
+  };
 };
 
 // =============================================
