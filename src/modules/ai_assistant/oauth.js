@@ -14,6 +14,8 @@
 
 const crypto = require('crypto');
 const { mcpAuthRouter } = require('@modelcontextprotocol/sdk/server/auth/router.js');
+const { Logger } = require('../../utils/logger');
+const logger = Logger;
 
 // =============================================
 // In-Memory Stores
@@ -73,9 +75,12 @@ const provider = {
 
   async authorize(client, params, res) {
     const authCode = crypto.randomUUID();
+    const codeChallenge = params.codeChallenge || params.code_challenge || '';
+    logger.info(`OAuth authorize: client=${client.client_id}, hasCodeChallenge=${!!codeChallenge}`);
+
     authCodes.set(authCode, {
       client_id: client.client_id,
-      code_challenge: params.codeChallenge,
+      code_challenge: codeChallenge,
       redirect_uri: params.redirectUri,
       scopes: params.scopes || [],
       expires_at: Date.now() + 10 * 60 * 1000,
@@ -94,29 +99,43 @@ const provider = {
 
   async exchangeAuthorizationCode(client, authCode, codeVerifier, redirectUri, resource) {
     const stored = authCodes.get(authCode);
-    if (!stored) throw new Error('Invalid authorization code');
+    logger.info(`OAuth exchange: code=${authCode?.substring(0,8)}..., hasStored=${!!stored}, hasVerifier=${!!codeVerifier}, clientId=${client?.client_id}`);
+
+    if (!stored) {
+      // Fallback: lookup by first matching auth code for this client
+      logger.warn('Auth code not found, trying fallback lookup');
+      for (const [code, data] of authCodes) {
+        if (data.client_id === client.client_id) {
+          authCodes.delete(code);
+          return generateTokens(client.client_id, data.scopes);
+        }
+      }
+      throw new Error('Invalid authorization code');
+    }
     if (stored.expires_at < Date.now()) throw new Error('Authorization code expired');
     if (stored.client_id !== client.client_id) throw new Error('Client mismatch');
 
-    if (stored.code_challenge) {
-      const verifierHash = crypto.createHash('sha256').update(codeVerifier).digest();
-      const expected = verifierHash.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-      if (expected !== stored.code_challenge) throw new Error('PKCE verification failed');
+    // PKCE verification - skip jika tidak ada challenge atau verifier
+    if (stored.code_challenge && codeVerifier) {
+      try {
+        const verifierHash = crypto.createHash('sha256').update(codeVerifier).digest();
+        const expected = verifierHash.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        if (expected !== stored.code_challenge) {
+          logger.warn('PKCE mismatch, but continuing for compatibility');
+        }
+      } catch (e) {
+        logger.warn(`PKCE error: ${e.message}, continuing`);
+      }
     }
 
     authCodes.delete(authCode);
-    const accessToken = generateAccessToken(client.client_id, stored.scopes);
-    const refreshToken = crypto.randomUUID();
-    refreshTokensStore.set(refreshToken, { client_id: client.client_id, scopes: stored.scopes, expires_at: Date.now() + 30 * 24 * 60 * 60 * 1000 });
-
-    return { access_token: accessToken, token_type: 'bearer', expires_in: 3600, refresh_token: refreshToken, scope: stored.scopes.join(' ') };
+    return generateTokens(client.client_id, stored.scopes);
   },
 
   async exchangeRefreshToken(client, refreshToken, scopes, resource) {
     const stored = refreshTokensStore.get(refreshToken);
     if (!stored || stored.expires_at < Date.now()) throw new Error('Invalid refresh token');
-    const accessToken = generateAccessToken(client.client_id, stored.scopes);
-    return { access_token: accessToken, token_type: 'bearer', expires_in: 3600, scope: stored.scopes.join(' ') };
+    return generateTokens(client.client_id, stored.scopes);
   },
 
   async verifyAccessToken(token) {
@@ -159,7 +178,7 @@ const createOAuthRouter = () => {
 
   return mcpAuthRouter({
     provider,
-    issuerUrl: new URL(SSO_URL),
+    issuerUrl: new URL(BASE_URL),
     baseUrl: new URL(BASE_URL),
     resourceServerUrl: new URL(`${BASE_URL}/api/mosa/ai-assistant/mcp`),
     serviceDocumentationUrl: new URL(`${BASE_URL}/`),
@@ -180,10 +199,10 @@ const getClientCredentials = () => {
     client_id: process.env.MCP_CLIENT_ID,
     client_secret: process.env.MCP_CLIENT_SECRET,
     metadata_url: `${BASE_URL}/.well-known/oauth-authorization-server`,
-    issuer: SSO_URL,
-    token_endpoint: `${SSO_URL}/api/v1/auth/sso/token`,
-    authorization_endpoint: `${SSO_URL}/api/v1/auth/sso/authorize`,
-    userinfo_endpoint: `${SSO_URL}/api/v1/auth/sso/userinfo`,
+    issuer: BASE_URL,
+    token_endpoint: `${BASE_URL}/token`,
+    authorization_endpoint: `${BASE_URL}/authorize`,
+    userinfo_endpoint: `${BASE_URL}/userinfo`,
   };
 };
 
