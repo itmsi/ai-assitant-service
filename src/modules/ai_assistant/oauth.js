@@ -192,7 +192,7 @@ const createOAuthRouter = () => {
     provider,
     issuerUrl: new URL(BASE_URL),
     baseUrl: new URL(BASE_URL),
-    resourceServerUrl: new URL(`${BASE_URL}/api/mosa/ai-assistant/mcp`),
+    resourceServerUrl: new URL(`${BASE_URL}/mcp`),
     serviceDocumentationUrl: new URL(`${BASE_URL}/`),
     scopesSupported: ['openid', 'profile', 'email'],
     resourceName: 'MSI AI Assistant MCP',

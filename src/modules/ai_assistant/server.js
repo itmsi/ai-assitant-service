@@ -80,7 +80,7 @@ app.get('/', (req, res) => {
       chat: 'POST /api/mosa/ai-assistant/chat',
       history: 'GET /api/mosa/ai-assistant/history/:sessionId',
       clearHistory: 'DELETE /api/mosa/ai-assistant/history/:sessionId',
-      mcp: 'POST /api/mosa/ai-assistant/mcp',
+      mcp: 'POST /mcp',
       health: 'GET /health',
     },
   });
@@ -94,7 +94,9 @@ app.use('/api/mosa/ai-assistant', aiAssistantRoutes);
 // =============================================
 // MCP Endpoint (Streamable HTTP)
 // =============================================
-app.use('/api/mosa/ai-assistant/mcp', getMCPRouter());
+const mcpRouter = getMCPRouter();
+app.use('/mcp', mcpRouter);
+app.use('/api/mosa/ai-assistant/mcp', mcpRouter);
 
 // =============================================
 // 404 Handler
@@ -142,9 +144,9 @@ app.listen(PORT, () => {
   console.log(`║  Provider: ${process.env.AI_MODEL_PROVIDER || 'openai'}                        `);
   console.log(`║  SSO     : ${process.env.SSO_SERVER_URL || 'localhost:9518'}          `);
   console.log('╚══════════════════════════════════════════════╝');
-  console.log(`🚀 AI Assistant running at http://localhost:${PORT}`);
-  console.log(`📚 Health check: http://localhost:${PORT}/health`);
-  console.log(`🤖 MCP endpoint: http://localhost:${PORT}/api/mosa/ai-assistant/mcp`);
+  console.log(`AI Assistant running at http://localhost:${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
 });
 
 // =============================================
