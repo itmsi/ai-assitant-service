@@ -6,6 +6,8 @@ const { sanitizePath, getDefaultHeaders, cleanObject } = require('./gateway');
 
 const searchPowerBIDashboard = {
   name: 'search_powerbi_dashboard',
+  menuKey: 'manage_power_bi',
+  action: 'read',
   description: 'Mencari data Power BI dashboard berdasarkan status. Gunakan ini untuk pertanyaan tentang dashboard Power BI yang aktif atau tersedia.',
   parameters: {
     type: 'object',
@@ -31,6 +33,8 @@ const searchPowerBIDashboard = {
 
 const searchPowerBICategory = {
   name: 'search_powerbi_category',
+  menuKey: 'manage_power_bi',
+  action: 'read',
   description: 'Mencari kategori Power BI. Gunakan ini untuk pertanyaan tentang kategori dashboard Power BI.',
   parameters: {
     type: 'object',
@@ -55,6 +59,8 @@ const searchPowerBICategory = {
 
 const searchPowerBIManage = {
   name: 'search_powerbi_manage',
+  menuKey: 'manage_power_bi',
+  action: 'read',
   description: 'Mencari data manajemen Power BI. Gunakan ini untuk pertanyaan tentang pengaturan atau manajemen Power BI.',
   parameters: {
     type: 'object',
