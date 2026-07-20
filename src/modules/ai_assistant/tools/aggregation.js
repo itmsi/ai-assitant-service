@@ -6,6 +6,8 @@ const { sanitizePath, getDefaultHeaders, cleanObject } = require('./gateway');
 
 const calculateQuotationGrandTotal = {
   name: 'calculate_quotation_grand_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total grand total dari semua quotation. Gunakan ini untuk pertanyaan tentang total quotation keseluruhan atau per customer.',
   parameters: {
     type: 'object',
@@ -35,6 +37,8 @@ const calculateQuotationGrandTotal = {
 
 const calculateQuotationProductTotal = {
   name: 'calculate_quotation_product_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total harga produk dari quotation.',
   parameters: { type: 'object', properties: { productName: { type: 'string', description: 'Nama produk (opsional)' }, limit: { type: 'number', description: 'Jumlah maksimal (default: 10000)' } } },
   execute: async ({ productName, limit = 10000 }, authToken) => {
@@ -56,6 +60,8 @@ const calculateQuotationProductTotal = {
 
 const calculateQuotationAccessoryTotal = {
   name: 'calculate_quotation_accessory_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total harga aksesori dari quotation.',
   parameters: { type: 'object', properties: { accessoryName: { type: 'string', description: 'Nama aksesori (opsional)' }, limit: { type: 'number', description: 'Jumlah maksimal (default: 10000)' } } },
   execute: async ({ accessoryName, limit = 10000 }, authToken) => {
@@ -77,6 +83,8 @@ const calculateQuotationAccessoryTotal = {
 
 const calculateQuotationTermConditionTotal = {
   name: 'calculate_quotation_term_condition_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total harga term & condition dari quotation.',
   parameters: { type: 'object', properties: { termConditionName: { type: 'string', description: 'Nama term condition (opsional)' }, limit: { type: 'number', description: 'Jumlah maksimal (default: 10000)' } } },
   execute: async ({ termConditionName, limit = 10000 }, authToken) => {
@@ -98,6 +106,8 @@ const calculateQuotationTermConditionTotal = {
 
 const calculateQuotationCustomerTotal = {
   name: 'calculate_quotation_customer_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total harga customer dari quotation.',
   parameters: { type: 'object', properties: { customerName: { type: 'string', description: 'Nama customer (opsional)' }, limit: { type: 'number', description: 'Jumlah maksimal (default: 10000)' } } },
   execute: async ({ customerName, limit = 10000 }, authToken) => {
@@ -119,6 +129,8 @@ const calculateQuotationCustomerTotal = {
 
 const calculateQuotationBankAccountTotal = {
   name: 'calculate_quotation_bank_account_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total harga bank account dari quotation.',
   parameters: { type: 'object', properties: { bankAccountName: { type: 'string', description: 'Nama bank account (opsional)' }, limit: { type: 'number', description: 'Jumlah maksimal (default: 10000)' } } },
   execute: async ({ bankAccountName, limit = 10000 }, authToken) => {
@@ -140,6 +152,8 @@ const calculateQuotationBankAccountTotal = {
 
 const calculateQuotationIslandTotal = {
   name: 'calculate_quotation_island_total',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung total harga pulau dari quotation.',
   parameters: { type: 'object', properties: { islandName: { type: 'string', description: 'Nama pulau (opsional)' }, limit: { type: 'number', description: 'Jumlah maksimal (default: 10000)' } } },
   execute: async ({ islandName, limit = 10000 }, authToken) => {
@@ -161,6 +175,8 @@ const calculateQuotationIslandTotal = {
 
 const calculateIUPCount = {
   name: 'calculate_iup_count',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung jumlah IUP berdasarkan filter tertentu.',
   parameters: {
     type: 'object',
@@ -197,6 +213,8 @@ const calculateIUPCount = {
 
 const calculateContractorCount = {
   name: 'calculate_contractor_count',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Menghitung jumlah contractor berdasarkan filter tertentu.',
   parameters: {
     type: 'object',
