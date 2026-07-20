@@ -38,11 +38,8 @@ const chat = async (req, res) => {
     let finalSessionId = sessionId;
 
     if (!finalSessionId) {
-      if (isAuthenticated) {
-        finalSessionId = `session_${userId}`;
-      } else {
-        finalSessionId = `session_guest_${Date.now()}`;
-      }
+      // Always create unique session per chat (timestamp-based) so 1 user can have many sessions
+      finalSessionId = `session_${userId}_${Date.now()}`;
     }
 
     // Process chat
