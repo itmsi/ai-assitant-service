@@ -213,7 +213,7 @@ const chatStream = async (req, res) => {
     // Load conversation history
     let conversationHistory = [];
     try {
-      conversationHistory = await getConversation(userId, sessionId || 'stream') || [];
+      conversationHistory = await getConversation(userId, sessionId) || [];
     } catch { conversationHistory = []; }
 
     // Summarize if needed
@@ -242,12 +242,12 @@ const chatStream = async (req, res) => {
       }
     }
 
-    // Done signal
-    res.write(`d:${JSON.stringify({ finishReason: 'stop', usage: {} })}\n\n`);
+    // Done signal with sessionId
+    const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
+    res.write(`d:${JSON.stringify({ finishReason: 'stop', usage: {}, sessionId: finalSessionId })}\n\n`);
     res.end();
 
     // Save conversation to DB (fire & forget)
-    const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
     conversationHistory.push({ role: 'user', content: message, timestamp: new Date().toISOString() });
     conversationHistory.push({ role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() });
 

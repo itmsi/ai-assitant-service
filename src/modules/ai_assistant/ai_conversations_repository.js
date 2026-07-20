@@ -68,11 +68,20 @@ const saveConversation = async (sessionId, userId, messages) => {
  */
 const getConversation = async (sessionId, userId) => {
   try {
-    const query = { session_id: sessionId };
-    if (userId) query.user_id = userId;
-    const conversation = await db('ai_conversations')
-      .where(query)
-      .first();
+    // Try with ownership check first
+    let conversation = null;
+    if (userId && userId !== 'anonymous') {
+      conversation = await db('ai_conversations')
+        .where({ session_id: sessionId, user_id: userId })
+        .first();
+    }
+
+    // Fallback to sessionId-only lookup
+    if (!conversation) {
+      conversation = await db('ai_conversations')
+        .where({ session_id: sessionId })
+        .first();
+    }
 
     if (!conversation) {
       logger.debug(`Conversation not found in DB: ${sessionId}`);
