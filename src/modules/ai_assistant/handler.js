@@ -1,6 +1,7 @@
 const { baseResponseGeneral } = require('../../utils/exception');
 const { processChat, clearConversation } = require('./service');
 const { getConversation } = require('../../utils/redis');
+const conversationRepo = require('./ai_conversations_repository');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -144,8 +145,44 @@ const clearHistory = async (req, res) => {
   }
 };
 
+/**
+ * List all conversation sessions by logged-in user
+ * POST method with optional user_id override in body
+ */
+const listByUser = async (req, res) => {
+  try {
+    const userId = req.body?.user_id || getUserId(req);
+
+    if (!userId || userId === 'anonymous') {
+      return baseResponseGeneral(res, {
+        success: false,
+        message: 'User ID tidak ditemukan. Pastikan sudah login SSO atau kirim user_id di body.',
+      });
+    }
+
+    const conversations = await conversationRepo.getConversationsByUserId(userId);
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Daftar riwayat percakapan berhasil diambil',
+      data: {
+        userId,
+        total: conversations.length,
+        conversations,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error in listByUser handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengambil daftar riwayat',
+    });
+  }
+};
+
 module.exports = {
   chat,
   getHistory,
   clearHistory,
+  listByUser,
 };

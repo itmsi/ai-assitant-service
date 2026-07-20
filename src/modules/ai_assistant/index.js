@@ -44,4 +44,17 @@ router.delete(
   handler.clearHistory
 );
 
+/**
+ * @route   POST /api/mosa/ai-assistant/history/list
+ * @desc    Get all conversation sessions by logged-in user
+ * @access  Protected (SSO token optional — fallback ke body user_id)
+ * @body    { user_id?: string }
+ * @header  Authorization: Bearer <SSO_TOKEN>
+ */
+router.post(
+  '/history/list',
+  optionalSSOToken,
+  handler.listByUser
+);
+
 module.exports = router;

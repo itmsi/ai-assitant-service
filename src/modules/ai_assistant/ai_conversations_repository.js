@@ -90,6 +90,26 @@ const getConversation = async (sessionId) => {
 };
 
 /**
+ * Get all conversations by user ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Array>}
+ */
+const getConversationsByUserId = async (userId) => {
+  try {
+    const conversations = await db('ai_conversations')
+      .where({ user_id: userId })
+      .orderBy('last_message_at', 'desc')
+      .select('session_id', 'user_id', 'message_count', 'last_message_at', 'created_at', 'updated_at');
+
+    logger.debug(`Conversations loaded for user: ${userId} (${conversations.length} sessions)`);
+    return conversations;
+  } catch (error) {
+    logger.error(`Error getting conversations by user: ${error.message || error}`);
+    return [];
+  }
+};
+
+/**
  * Delete conversation by session ID
  * @param {string} sessionId - Session ID
  * @returns {Promise<boolean>}
@@ -133,5 +153,6 @@ module.exports = {
   saveConversation,
   getConversation,
   deleteConversation,
+  getConversationsByUserId,
   cleanupExpiredConversations,
 };

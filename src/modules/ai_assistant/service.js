@@ -139,15 +139,51 @@ const initializeModel = () => {
 };
 
 /**
+ * Summarize older conversation messages into a concise text
+ * Extracts key user questions and assistant responses
+ */
+const summarizeConversation = (messages) => {
+  if (!messages || messages.length === 0) return '';
+
+  const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
+  const assistantMessages = messages.filter(m => m.role === 'assistant').map(m => m.content);
+
+  let summary = '';
+  
+  // First user message (conversation starter)
+  if (userMessages.length > 0) {
+    const first = userMessages[0].substring(0, 150);
+    summary += `Topik awal: "${first}${userMessages[0].length > 150 ? '...' : ''}"`;
+  }
+
+  // Key questions asked
+  if (userMessages.length > 1) {
+    const questions = userMessages.slice(1).filter(m => m.includes('?') || m.length < 200);
+    if (questions.length > 0) {
+      summary += ` | Pertanyaan: ${questions.length} pertanyaan diajukan`;
+    }
+  }
+
+  summary += ` | Total ${messages.length} pesan sebelumnya diringkas.`;
+
+  return summary;
+};
+
+/**
  * Convert conversation history from Redis to LangChain messages
  * @param {Array} conversationHistory - Conversation history from Redis
  * @param {string} systemPrompt - System prompt content
+ * @param {string} summaryText - Optional summary of older conversation
  */
-const convertToLangChainMessages = (conversationHistory, systemPrompt) => {
+const convertToLangChainMessages = (conversationHistory, systemPrompt, summaryText) => {
   const messages = [];
 
-  // Add system message
-  messages.push(new SystemMessage(systemPrompt));
+  // Add system message with optional summary
+  let finalPrompt = systemPrompt;
+  if (summaryText) {
+    finalPrompt += `\n\n**Ringkasan Percakapan Sebelumnya:**\n${summaryText}`;
+  }
+  messages.push(new SystemMessage(finalPrompt));
 
   // Convert conversation history
   if (conversationHistory && Array.isArray(conversationHistory)) {
@@ -323,8 +359,21 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
       conversationHistory = [];
     }
 
+    // Summarize older conversation to save tokens
+    let summaryText = '';
+    const maxHistoryBeforeSummary = aiConfig.AI_MAX_CONVERSATION_HISTORY * 2; // 20 messages
+    if (conversationHistory.length > maxHistoryBeforeSummary) {
+      const keepDetailed = 6; // keep last 3 pairs (6 messages) in full detail
+      const oldMessages = conversationHistory.slice(0, -keepDetailed);
+      const recentMessages = conversationHistory.slice(-keepDetailed);
+      
+      summaryText = summarizeConversation(oldMessages);
+      conversationHistory = recentMessages;
+      logger.info(`Conversation summarized: ${oldMessages.length} old messages compressed, keeping ${recentMessages.length} recent messages`);
+    }
+
     // Convert to LangChain messages with system prompt from database
-    const messages = convertToLangChainMessages(conversationHistory, systemPrompt);
+    const messages = convertToLangChainMessages(conversationHistory, systemPrompt, summaryText);
     messages.push(new HumanMessage(userMessage));
 
     // Prepare model with tools if function calling is enabled
