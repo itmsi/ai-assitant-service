@@ -517,4 +517,6 @@ module.exports = {
   initializeModel,
   getSystemPrompt,
   clearSystemPromptCache,
+  convertToLangChainMessages,
+  summarizeConversation,
 };

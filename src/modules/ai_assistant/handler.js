@@ -1,7 +1,9 @@
 const { baseResponseGeneral } = require('../../utils/exception');
-const { processChat, clearConversation } = require('./service');
-const { getConversation } = require('../../utils/redis');
+const { processChat, clearConversation, initializeModel, getSystemPrompt } = require('./service');
+const { getConversation, saveConversation } = require('../../utils/redis');
+const { convertToLangChainMessages } = require('./service');
 const conversationRepo = require('./ai_conversations_repository');
+const { HumanMessage, AIMessage, SystemMessage } = require('@langchain/core/messages');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -178,9 +180,99 @@ const listByUser = async (req, res) => {
   }
 };
 
+/**
+ * Streaming chat endpoint using SSE (Server-Sent Events)
+ */
+const chatStream = async (req, res) => {
+  const { message, sessionId, system } = req.body;
+  const userId = req.body.employee_id || req.body.userId || getUserId(req);
+  const authToken = req.authToken || null;
+
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, message: 'Pesan tidak boleh kosong' }));
+  }
+
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  try {
+    const model = initializeModel();
+    let systemPrompt = await getSystemPrompt();
+
+    // Build access control if provided
+    if (Array.isArray(system)) {
+      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${system.join(', ')}].\n...`;
+    }
+
+    // Load conversation history
+    let conversationHistory = [];
+    try {
+      conversationHistory = await getConversation(userId, sessionId || 'stream') || [];
+    } catch { conversationHistory = []; }
+
+    // Summarize if needed
+    let summaryText = '';
+    const maxHistory = 20;
+    if (conversationHistory.length > maxHistory) {
+      const { summarizeConversation } = require('./service');
+      const oldMessages = conversationHistory.slice(0, -6);
+      conversationHistory = conversationHistory.slice(-6);
+      summaryText = summarizeConversation(oldMessages);
+    }
+
+    // Build messages
+    const messages = convertToLangChainMessages(conversationHistory, systemPrompt, summaryText);
+    messages.push(new HumanMessage(message));
+
+    // Stream model response
+    let fullResponse = '';
+    const stream = await model.stream(messages);
+
+    for await (const chunk of stream) {
+      const text = typeof chunk.content === 'string' ? chunk.content : '';
+      if (text) {
+        fullResponse += text;
+        res.write(`0:${JSON.stringify(text)}\n\n`);
+      }
+    }
+
+    // Done signal
+    res.write(`d:${JSON.stringify({ finishReason: 'stop', usage: {} })}\n\n`);
+    res.end();
+
+    // Save conversation to DB (fire & forget)
+    const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
+    conversationHistory.push({ role: 'user', content: message, timestamp: new Date().toISOString() });
+    conversationHistory.push({ role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() });
+
+    try {
+      await saveConversation(userId, finalSessionId, conversationHistory);
+      const repo = require('./ai_conversations_repository');
+      await repo.saveConversation(finalSessionId, userId, conversationHistory);
+    } catch { /* silent */ }
+
+  } catch (error) {
+    logger.error(`Stream error: ${error.message}`);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, message: error.message }));
+    } else {
+      res.write(`3:${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    }
+  }
+};
+
 module.exports = {
   chat,
   getHistory,
   clearHistory,
   listByUser,
+  chatStream,
 };

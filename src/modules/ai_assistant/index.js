@@ -57,4 +57,16 @@ router.post(
   handler.listByUser
 );
 
+/**
+ * @route   POST /api/mosa/ai-assistant/chat/stream
+ * @desc    Chat with streaming response (SSE)
+ * @access  Protected (SSO token optional)
+ * @body    { message: string, sessionId?: string, system?: string[], userId?: string }
+ */
+router.post(
+  '/chat/stream',
+  optionalSSOToken,
+  handler.chatStream
+);
+
 module.exports = router;
