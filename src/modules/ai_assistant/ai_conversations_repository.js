@@ -61,14 +61,17 @@ const saveConversation = async (sessionId, userId, messages) => {
 };
 
 /**
- * Get conversation history by session ID
+ * Get conversation history by session ID (with ownership check)
  * @param {string} sessionId - Session ID
+ * @param {string} userId - User ID for ownership verification
  * @returns {Promise<Array|null>}
  */
-const getConversation = async (sessionId) => {
+const getConversation = async (sessionId, userId) => {
   try {
+    const query = { session_id: sessionId };
+    if (userId) query.user_id = userId;
     const conversation = await db('ai_conversations')
-      .where({ session_id: sessionId })
+      .where(query)
       .first();
 
     if (!conversation) {
