@@ -519,4 +519,5 @@ module.exports = {
   clearSystemPromptCache,
   convertToLangChainMessages,
   summarizeConversation,
+  extractToolCalls,
 };

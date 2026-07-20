@@ -1,9 +1,18 @@
 const { baseResponseGeneral } = require('../../utils/exception');
-const { processChat, clearConversation, initializeModel, getSystemPrompt } = require('./service');
+const {
+  processChat,
+  clearConversation,
+  initializeModel,
+  getSystemPrompt,
+  convertToLangChainMessages,
+  summarizeConversation,
+  extractToolCalls,
+} = require('./service');
 const { getConversation, saveConversation } = require('../../utils/redis');
-const { convertToLangChainMessages } = require('./service');
 const conversationRepo = require('./ai_conversations_repository');
-const { HumanMessage, AIMessage, SystemMessage } = require('@langchain/core/messages');
+const { HumanMessage, AIMessage, SystemMessage, ToolMessage } = require('@langchain/core/messages');
+const { getToolsForLangChain, executeTool } = require('./tools');
+const aiConfig = require('../../config/ai');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -182,6 +191,12 @@ const listByUser = async (req, res) => {
 
 /**
  * Streaming chat endpoint using SSE (Server-Sent Events)
+ * Mendukung:
+ * - Streaming token-by-token via SSE
+ * - Function calling / tool execution (dengan looping sampai selesai)
+ * - Client disconnect handling (mencegah token wastage)
+ * - Conversation history dengan summarization
+ * - Access control per module
  */
 const chatStream = async (req, res) => {
   const { message, sessionId, system } = req.body;
@@ -201,13 +216,24 @@ const chatStream = async (req, res) => {
     'X-Accel-Buffering': 'no',
   });
 
+  // =========================================
+  // Client disconnect handler (P1 Fix)
+  // =========================================
+  let isClientConnected = true;
+  req.on('close', () => {
+    isClientConnected = false;
+    logger.info(`[Stream] Client disconnected - ${sessionId || 'new session'}`);
+  });
+
+  const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
+
   try {
     const model = initializeModel();
     let systemPrompt = await getSystemPrompt();
 
     // Build access control if provided
     if (Array.isArray(system)) {
-      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${system.join(', ')}].\n...`;
+      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${system.join(', ')}].\nYou are PROHIBITED from providing any data, information, or assistance related to modules NOT in this list.\n\nCRITICAL RULE: If the user's message mentions a restricted module (e.g., asking about "CRM", "HR", "Employee" when these are not in the list), you must REFUSE IMPLICITLY AND IMMEDIATELY, even if you think you have tools that could answer part of the question. The presence of the restricted word in the context of a data request is grounds for refusal.\n\nRefusal Response:\n"Mohon maaf, Anda tidak memiliki hak akses untuk module tersebut."\n\nDo not explain why. Do not try to bypass this by using similar tools from other modules. STOP and return the refusal response.`;
     }
 
     // Load conversation history
@@ -216,11 +242,10 @@ const chatStream = async (req, res) => {
       conversationHistory = await getConversation(userId, sessionId) || [];
     } catch { conversationHistory = []; }
 
-    // Summarize if needed
+    // Summarize if needed — threshold konsisten dengan non-streaming (config-based)
     let summaryText = '';
-    const maxHistory = 20;
+    const maxHistory = (aiConfig.AI_MAX_CONVERSATION_HISTORY || 10) * 2;
     if (conversationHistory.length > maxHistory) {
-      const { summarizeConversation } = require('./service');
       const oldMessages = conversationHistory.slice(0, -6);
       conversationHistory = conversationHistory.slice(-6);
       summaryText = summarizeConversation(oldMessages);
@@ -230,41 +255,183 @@ const chatStream = async (req, res) => {
     const messages = convertToLangChainMessages(conversationHistory, systemPrompt, summaryText);
     messages.push(new HumanMessage(message));
 
-    // Stream model response
-    let fullResponse = '';
-    const stream = await model.stream(messages);
-
-    for await (const chunk of stream) {
-      const text = typeof chunk.content === 'string' ? chunk.content : '';
-      if (text) {
-        fullResponse += text;
-        res.write(`0:${JSON.stringify(text)}\n\n`);
+    // =========================================
+    // Prepare model with tools (P1 Fix: tool calling support)
+    // =========================================
+    let modelToUse = model;
+    if (aiConfig.AI_ENABLE_FUNCTION_CALLING) {
+      const tools = getToolsForLangChain(system);
+      try {
+        modelToUse = model.bind({ tools });
+      } catch (bindError) {
+        logger.warn(`[Stream] Failed to bind tools: ${bindError.message}`);
       }
     }
 
-    // Done signal with sessionId
-    const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
+    // =========================================
+    // Streaming loop dengan tool calling support
+    // =========================================
+    let fullResponse = '';
+    let toolIterations = 0;
+    const MAX_TOOL_ITERATIONS = 10;
+
+    do {
+      // Safety: prevent infinite tool loops
+      if (toolIterations >= MAX_TOOL_ITERATIONS) {
+        logger.warn(`[Stream] Tool iteration limit reached (${MAX_TOOL_ITERATIONS}) for session ${finalSessionId}`);
+        break;
+      }
+      toolIterations++;
+
+      if (!isClientConnected) break;
+
+      // Stream model response
+      let stream;
+      try {
+        stream = await modelToUse.stream(messages);
+      } catch (streamError) {
+        logger.error(`[Stream] Failed to start stream: ${streamError.message}`);
+        if (!res.headersSent) throw streamError;
+        res.write(`3:${JSON.stringify({ error: streamError.message, sessionId: finalSessionId })}\n\n`);
+        return res.end();
+      }
+
+      const streamChunks = [];
+      let iterationResponse = '';
+
+      for await (const chunk of stream) {
+        if (!isClientConnected) break;
+
+        streamChunks.push(chunk);
+
+        // Stream text content immediately
+        const text = typeof chunk.content === 'string' ? chunk.content : '';
+        if (text) {
+          iterationResponse += text;
+          res.write(`0:${JSON.stringify(text)}\n\n`);
+        }
+      }
+
+      if (!isClientConnected) break;
+
+      fullResponse += iterationResponse;
+
+      // If no chunks at all, stop
+      if (streamChunks.length === 0) break;
+
+      // Merge all chunks to check for tool calls
+      const mergedMessage = streamChunks.reduce((acc, chunk) => acc.concat(chunk));
+
+      // Extract tool calls from merged message (P1 Fix: tool calling)
+      let toolCalls = extractToolCalls(mergedMessage);
+
+      // Fallback: check tool_call_chunks directly jika extractToolCalls tidak menemukan
+      if (toolCalls.length === 0 && mergedMessage.tool_call_chunks?.length > 0) {
+        toolCalls = mergedMessage.tool_call_chunks
+          .filter((tc) => tc.name)
+          .map((tc) => {
+            let args = {};
+            try {
+              args = tc.args ? JSON.parse(tc.args) : {};
+            } catch { /* args partial — parse gagal */ }
+            return {
+              id: tc.id || `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+              name: tc.name,
+              args,
+            };
+          });
+      }
+
+      if (toolCalls.length === 0) {
+        // No tool calls — streaming selesai untuk iterasi ini
+        messages.push(mergedMessage);
+        break;
+      }
+
+      // Tool calls detected — notify client
+      logger.info(`[Stream] Tool calls detected: ${toolCalls.map((t) => t.name).join(', ')} (iteration ${toolIterations})`);
+      res.write(`2:${JSON.stringify({
+        toolCalls: toolCalls.map((t) => ({ name: t.name, id: t.id })),
+        count: toolCalls.length,
+        iteration: toolIterations,
+        sessionId: finalSessionId,
+      })}\n\n`);
+
+      // Add assistant message with tool calls ke conversation
+      messages.push(mergedMessage);
+
+      // Execute tool calls
+      for (const toolCall of toolCalls) {
+        if (!isClientConnected) break;
+
+        try {
+          logger.info(`[Stream] Executing tool: ${toolCall.name}`, toolCall.args);
+          const result = await executeTool(toolCall.name, toolCall.args || {}, authToken);
+
+          messages.push(new ToolMessage({
+            content: JSON.stringify(result, null, 2),
+            tool_call_id: toolCall.id,
+          }));
+        } catch (toolError) {
+          logger.error(`[Stream] Tool ${toolCall.name} error: ${toolError.message}`);
+          messages.push(new ToolMessage({
+            content: JSON.stringify({ success: false, message: `Error: ${toolError.message}` }),
+            tool_call_id: toolCall.id,
+          }));
+        }
+      }
+
+      // Loop: stream lagi dengan hasil tool execution
+    } while (isClientConnected);
+
+    // Client disconnected — akhiri tanpa save
+    if (!isClientConnected) {
+      try { res.end(); } catch { /* ignore */ }
+      logger.info(`[Stream] Session ${finalSessionId}: ended due to client disconnect`);
+      return;
+    }
+
+    // =========================================
+    // Done signal
+    // =========================================
     res.write(`d:${JSON.stringify({ finishReason: 'stop', usage: {}, sessionId: finalSessionId })}\n\n`);
     res.end();
 
-    // Save conversation to DB (fire & forget)
-    conversationHistory.push({ role: 'user', content: message, timestamp: new Date().toISOString() });
-    conversationHistory.push({ role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() });
+    // =========================================
+    // Save conversation — only ONCE (P1 Fix: double save)
+    // =========================================
+    const historyCopy = [
+      ...conversationHistory,
+      { role: 'user', content: message, timestamp: new Date().toISOString() },
+      { role: 'assistant', content: fullResponse, timestamp: new Date().toISOString() },
+    ];
 
     try {
-      await saveConversation(userId, finalSessionId, conversationHistory);
-      const repo = require('./ai_conversations_repository');
-      await repo.saveConversation(finalSessionId, userId, conversationHistory);
-    } catch { /* silent */ }
+      await saveConversation(userId, finalSessionId, historyCopy);
+      // saveConversation dari redis.js sudah mendelegasikan ke conversationRepo.saveConversation()
+      // Tidak perlu panggil repo.saveConversation() lagi — sudah otomatis
+      logger.info(`[Stream] Conversation saved: ${finalSessionId} (${historyCopy.length} messages)`);
+    } catch (saveError) {
+      // Log error instead of silent catch (P1 Fix: hidden errors)
+      logger.warn(`[Stream] Failed to save conversation ${finalSessionId}: ${saveError.message}`);
+    }
 
   } catch (error) {
-    logger.error(`Stream error: ${error.message}`);
+    if (!isClientConnected) {
+      logger.info(`[Stream] Session ${finalSessionId}: aborted — client disconnected`);
+      return;
+    }
+
+    logger.error(`[Stream] Error for session ${finalSessionId}: ${error.message}`);
+
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, message: error.message }));
     } else {
-      res.write(`3:${JSON.stringify({ error: error.message })}\n\n`);
-      res.end();
+      try {
+        res.write(`3:${JSON.stringify({ error: error.message, sessionId: finalSessionId })}\n\n`);
+        res.end();
+      } catch { /* ignore write errors after stream end */ }
     }
   }
 };
