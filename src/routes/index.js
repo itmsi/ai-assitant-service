@@ -44,6 +44,10 @@ const isSwaggerEnabled = () => {
   return process?.env?.NODE_ENV === 'development'
 }
 
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' })
+})
+
 // Prometheus metrics endpoint
 router.get('/metrics', async (req, res) => {
   try {
