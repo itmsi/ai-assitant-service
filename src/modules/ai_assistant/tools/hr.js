@@ -6,6 +6,8 @@ const { sanitizePath, getDefaultHeaders, cleanObject } = require('./gateway');
 
 const searchHRCandidates = {
   name: 'search_hr_candidates',
+  menuKey: 'employees',
+  action: 'read',
   description: 'Mencari kandidat dari modul HR berdasarkan kriteria tertentu seperti bulan, status, atau keyword pencarian. Gunakan ini untuk pertanyaan tentang kandidat baru, kandidat bulan ini, atau pencarian kandidat.',
   parameters: {
     type: 'object',
@@ -66,6 +68,8 @@ const searchHRCandidates = {
 
 const searchHREmployees = {
   name: 'search_hr_employees',
+  menuKey: 'employees',
+  action: 'read',
   description: 'Mencari data karyawan dari modul HR berdasarkan nama, departemen, atau status.',
   parameters: {
     type: 'object',
