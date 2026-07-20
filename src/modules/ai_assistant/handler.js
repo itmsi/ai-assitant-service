@@ -19,7 +19,7 @@ const getUserId = (req) => {
 const chat = async (req, res) => {
   try {
     const { message, sessionId, system } = req.body;
-    const employee_id = req.body.employee_id || getUserId(req);
+    const employee_id = req.body.employee_id || req.body.userId || getUserId(req);
 
     // Validation
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -155,8 +155,9 @@ const listByUser = async (req, res) => {
 
     if (!userId || userId === 'anonymous') {
       return baseResponseGeneral(res, {
-        success: false,
-        message: 'User ID tidak ditemukan. Pastikan sudah login SSO atau kirim user_id di body.',
+        success: true,
+        message: 'User tidak terautentikasi, tidak ada riwayat',
+        data: { userId: 'anonymous', total: 0, conversations: [] },
       });
     }
 
