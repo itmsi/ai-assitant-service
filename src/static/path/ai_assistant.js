@@ -157,6 +157,81 @@ const aiAssistantPaths = {
         }
       }
     }
+  },
+  '/ai-assistant/history/list': {
+    post: {
+      tags: ['AI Assistant'],
+      summary: 'List semua session percakapan user',
+      description: 'Mengambil daftar semua session percakapan milik user yang sedang login (berdasarkan SSO token atau user_id di body).',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                user_id: { type: 'string', description: 'Opsional. Override user ID' }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Daftar riwayat berhasil diambil',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiHistoryListResponse' }
+            }
+          }
+        },
+        500: {
+          description: 'Terjadi kesalahan',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiErrorResponse' }
+            }
+          }
+        }
+      }
+    }
+  },
+  '/ai-assistant/chat/stream': {
+    post: {
+      tags: ['AI Assistant'],
+      summary: 'Kirim pesan dengan streaming response (SSE)',
+      description: 'Sama seperti /chat tetapi response dikirim token-by-token via Server-Sent Events.',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/AiChatRequest' }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Streaming response (text/event-stream) — token muncul bertahap'
+        },
+        400: {
+          description: 'Validasi gagal',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiErrorResponse' }
+            }
+          }
+        },
+        500: {
+          description: 'Terjadi kesalahan',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiErrorResponse' }
+            }
+          }
+        }
+      }
+    }
   }
 };
 
