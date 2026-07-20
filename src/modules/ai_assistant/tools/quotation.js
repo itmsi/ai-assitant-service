@@ -6,6 +6,8 @@ const { sanitizePath, getDefaultHeaders, cleanObject } = require('./gateway');
 
 const searchQuotations = {
   name: 'search_quotations',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data quotation/transaksi quotation berdasarkan nomor, status, periode, atau keyword. Gunakan ini untuk pertanyaan tentang transaksi quotation, quotation management, grand total quotation, nama customer quotation, jumlah quotation keseluruhan, dll. Tool ini mengakses endpoint POST /api/quotation/manage-quotation/get. Response dari endpoint berisi data quotation dengan informasi seperti manage_quotation_grand_total (grand total), customer_name (nama customer), quotation_number, status, quotation_for, dan field lainnya. Response juga berisi pagination object dengan struktur: { page, limit, total, totalPages }. Field "total" di dalam pagination menunjukkan jumlah quotation keseluruhan. **PENTING**: Untuk pertanyaan "berapa jumlah quotation yang ada keseluruhan" atau "berapa total quotation" atau "berapa jumlah transaksi quotation", gunakan tool ini dan ambil nilai dari response.data.pagination.total. JANGAN menghitung dari array data (response.data.data atau response.data), karena array data hanya berisi data untuk halaman tertentu (misalnya 10 data untuk page 1), bukan total keseluruhan. Langsung ambil nilai dari response.data.pagination.total saja. Contoh: jika response.data.pagination = { page: 1, limit: 10, total: 36, totalPages: 4 }, maka jawabannya adalah 36 dari pagination.total.',
   parameters: {
     type: 'object',
@@ -92,6 +94,8 @@ const searchQuotations = {
 
 const searchQuotationProducts = {
   name: 'search_quotation_products',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data produk quotation (component product). Gunakan ini untuk pertanyaan tentang produk yang digunakan dalam quotation.',
   parameters: {
     type: 'object',
@@ -118,6 +122,8 @@ const searchQuotationProducts = {
 
 const searchQuotationAccessory = {
   name: 'search_quotation_accessory',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data aksesori quotation. Gunakan ini untuk pertanyaan tentang aksesori yang digunakan dalam quotation.',
   parameters: {
     type: 'object',
@@ -144,6 +150,8 @@ const searchQuotationAccessory = {
 
 const searchQuotationTermCondition = {
   name: 'search_quotation_term_condition',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data term dan condition quotation. Gunakan ini untuk pertanyaan tentang syarat dan ketentuan quotation.',
   parameters: {
     type: 'object',
@@ -170,6 +178,8 @@ const searchQuotationTermCondition = {
 
 const searchQuotationCustomer = {
   name: 'search_quotation_customer',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data customer quotation. Gunakan ini untuk pertanyaan tentang customer yang terkait dengan quotation.',
   parameters: {
     type: 'object',
@@ -196,6 +206,8 @@ const searchQuotationCustomer = {
 
 const searchQuotationBankAccount = {
   name: 'search_quotation_bank_account',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data bank account quotation. Gunakan ini untuk pertanyaan tentang rekening bank yang digunakan dalam quotation.',
   parameters: {
     type: 'object',
@@ -222,6 +234,8 @@ const searchQuotationBankAccount = {
 
 const searchQuotationIsland = {
   name: 'search_quotation_island',
+  menuKey: 'manage_quotation',
+  action: 'read',
   description: 'Mencari data pulau (island) KHUSUS untuk keperluan Quotation. JANGAN gunakan tool ini jika user bertanya tentang Island dalam konteks CRM atau module lain. Hanya gunakan jika konteksnya adalah Quotation.',
   parameters: {
     type: 'object',

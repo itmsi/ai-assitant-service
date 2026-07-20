@@ -6,6 +6,8 @@ const { sanitizePath, getDefaultHeaders, cleanObject } = require('./gateway');
 
 const searchCRMTerritory = {
   name: 'search_crm_territory',
+  menuKey: 'iup_management_crm',
+  action: 'read',
   description: 'Mencari data territory management CRM. Gunakan ini untuk pertanyaan tentang wilayah atau territory dalam CRM.',
   parameters: {
     type: 'object',
@@ -33,6 +35,8 @@ const searchCRMTerritory = {
 
 const searchCRMIUPManagement = {
   name: 'search_crm_iup_management',
+  menuKey: 'iup_management_crm',
+  action: 'read',
   description: 'Mencari data IUP (Izin Usaha Pertambangan) management CRM. Gunakan ini untuk pertanyaan tentang IUP dalam CRM. Tool ini mengakses endpoint /api/crm/iup_management/get untuk mendapatkan data IUP. Response dari endpoint ini berisi summary statistics seperti total_iup, total_iup_aktif, total_contractor, total_iup_have_contractor, total_iup_no_contractor.',
   parameters: {
     type: 'object',
@@ -64,6 +68,8 @@ const searchCRMIUPManagement = {
 
 const searchCRMSegmentation = {
   name: 'search_crm_segmentation',
+  menuKey: 'iup_management_crm',
+  action: 'read',
   description: 'Mencari data segmentasi CRM. Gunakan ini untuk pertanyaan tentang segmentasi customer dalam CRM.',
   parameters: {
     type: 'object',
@@ -91,6 +97,8 @@ const searchCRMSegmentation = {
 
 const searchCRMIUPCustomers = {
   name: 'search_crm_iup_customers',
+  menuKey: 'contractors_crm',
+  action: 'read',
   description: 'Mencari data customer atau contractor IUP CRM. Gunakan ini untuk pertanyaan tentang customer atau contractor yang terkait dengan IUP.',
   parameters: {
     type: 'object',
@@ -120,6 +128,8 @@ const searchCRMIUPCustomers = {
 
 const searchCRMTransactions = {
   name: 'search_crm_transactions',
+  menuKey: 'iup_management_crm',
+  action: 'read',
   description: 'Mencari data transaksi atau aktivitas CRM. Gunakan ini untuk pertanyaan tentang transaksi atau aktivitas dalam CRM.',
   parameters: {
     type: 'object',
@@ -147,6 +157,8 @@ const searchCRMTransactions = {
 
 const searchCRMEmployeeDataAccess = {
   name: 'search_crm_employee_data_access',
+  menuKey: 'iup_management_crm',
+  action: 'read',
   description: 'Mencari data akses employee CRM. Gunakan ini untuk pertanyaan tentang user management atau akses data employee dalam CRM.',
   parameters: {
     type: 'object',
@@ -174,6 +186,8 @@ const searchCRMEmployeeDataAccess = {
 
 const searchCRMIsland = {
   name: 'search_crm_island',
+  menuKey: 'iup_management_crm',
+  action: 'read',
   description: 'Mencari data island dari CRM. Gunakan ini untuk pertanyaan tentang island di dalam CRM.',
   parameters: {
     type: 'object',
