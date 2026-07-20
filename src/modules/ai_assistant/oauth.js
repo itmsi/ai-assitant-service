@@ -46,24 +46,35 @@ clients.set(MCP_CLIENT_ID, {
 // =============================================
 // Clients Store
 // =============================================
+const { fetchByParam } = require('../../repository/postgres/core_postgres');
+const bcrypt = require('bcrypt');
+
 const clientsStore = {
-  getClient: async (clientId) => clients.get(clientId) || null,
+  getClient: async (clientId) => {
+    try {
+      const dbClient = await fetchByParam('gate_sso_mcp_credentials', { client_id: clientId, status: 'active' });
+      if (!dbClient) return null;
+      
+      return {
+        client_id: dbClient.client_id,
+        client_secret: dbClient.client_secret_hash, // We return the hash, interceptor will handle matching
+        mcp_credential_id: dbClient.mcp_credential_id,
+        client_secret_hash: dbClient.client_secret_hash,
+        client_id_issued_at: Math.floor(Date.now() / 1000),
+        client_name: 'MCP Client',
+        redirect_uris: (process.env.MCP_REDIRECT_URIS || '').split(',').map(u => u.trim()).filter(Boolean),
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_post',
+      };
+    } catch (error) {
+      logger.error('Error fetching client from DB:', error);
+      return null;
+    }
+  },
 
   registerClient: async (client) => {
-    const clientId = `client_${crypto.randomUUID().slice(0, 8)}`;
-    const clientSecret = crypto.randomBytes(24).toString('hex');
-    const newClient = {
-      client_id: clientId,
-      client_secret: clientSecret,
-      client_id_issued_at: Math.floor(Date.now() / 1000),
-      client_name: client.client_name || 'Registered Client',
-      redirect_uris: client.redirect_uris ,
-      grant_types: client.grant_types || ['authorization_code', 'refresh_token'],
-      response_types: client.response_types || ['code'],
-      token_endpoint_auth_method: client.token_endpoint_auth_method || 'client_secret_post',
-    };
-    clients.set(clientId, newClient);
-    return newClient;
+    throw new Error('Dynamic registration via OAuth is disabled. Use /mcp/provision instead.');
   },
 };
 
@@ -107,7 +118,7 @@ const provider = {
       for (const [code, data] of authCodes) {
         if (data.client_id === client.client_id) {
           authCodes.delete(code);
-          return generateTokens(client.client_id, data.scopes);
+          return generateTokens(client, data.scopes);
         }
       }
       throw new Error('Invalid authorization code');
@@ -129,13 +140,13 @@ const provider = {
     }
 
     authCodes.delete(authCode);
-    return generateTokens(client.client_id, stored.scopes);
+    return generateTokens(client, stored.scopes);
   },
 
   async exchangeRefreshToken(client, refreshToken, scopes, resource) {
     const stored = refreshTokensStore.get(refreshToken);
     if (!stored || stored.expires_at < Date.now()) throw new Error('Invalid refresh token');
-    return generateTokens(client.client_id, stored.scopes);
+    return generateTokens(client, stored.scopes);
   },
 
   async verifyAccessToken(token) {
@@ -159,13 +170,14 @@ const provider = {
   },
 };
 
-const generateTokens = (clientId, scopes) => {
+const generateTokens = (client, scopes) => {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const payload = Buffer.from(JSON.stringify({ 
     iss: process.env.MCP_BASE_URL || `http://localhost:${process.env.AI_ASSISTANT_PORT || 9588}`,
-    sub: clientId, 
-    client_id: clientId, 
+    sub: client.client_id, 
+    client_id: client.client_id, 
+    mcp_credential_id: client.mcp_credential_id, // Inject credential id
     scope: scopes.join(' '), 
     iat: now
   })).toString('base64url');
@@ -186,9 +198,31 @@ const generateTokens = (clientId, scopes) => {
 const createOAuthRouter = () => {
   const PORT = process.env.AI_ASSISTANT_PORT || 9588;
   const BASE_URL = process.env.MCP_BASE_URL || `http://localhost:${PORT}`;
-  const SSO_URL = process.env.SSO_SERVER_URL || `http://localhost:${PORT}`;
+  
+  const express = require('express');
+  const router = express.Router();
 
-  return mcpAuthRouter({
+  // Intercept /token to handle bcrypt validation before mcpAuthRouter
+  router.post('/token', async (req, res, next) => {
+    const { client_id, client_secret } = req.body;
+    if (client_id && client_secret) {
+      try {
+        const dbClient = await fetchByParam('gate_sso_mcp_credentials', { client_id, status: 'active' });
+        if (dbClient && dbClient.client_secret_hash) {
+          const isMatch = await bcrypt.compare(client_secret, dbClient.client_secret_hash);
+          if (isMatch) {
+            // Overwrite plain secret with hash so SDK's internal equality check passes
+            req.body.client_secret = dbClient.client_secret_hash;
+          }
+        }
+      } catch (err) {
+        logger.error('Error in /token interceptor:', err);
+      }
+    }
+    next();
+  });
+
+  const mcpRouter = mcpAuthRouter({
     provider,
     issuerUrl: new URL(BASE_URL),
     baseUrl: new URL(BASE_URL),
@@ -197,6 +231,9 @@ const createOAuthRouter = () => {
     scopesSupported: ['openid', 'profile', 'email'],
     resourceName: 'MSI AI Assistant MCP',
   });
+  
+  router.use(mcpRouter);
+  return router;
 };
 
 // =============================================
