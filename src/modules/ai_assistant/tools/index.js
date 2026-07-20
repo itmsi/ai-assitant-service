@@ -90,6 +90,19 @@ const TOOL_MODULE_MAP = {
 };
 
 /**
+ * Tool to Permission Mapping for MCP
+ */
+const TOOL_PERMISSION_MAP = {};
+// Auto-generate mapping from TOOL_MODULE_MAP for simplicity:
+// First element of allowed modules becomes menuKey, default action is 'read'
+for (const [toolName, modules] of Object.entries(TOOL_MODULE_MAP)) {
+  TOOL_PERMISSION_MAP[toolName] = { 
+    menuKey: modules[0], 
+    action: 'read' 
+  };
+}
+
+/**
  * Convert tools to LangChain format
  */
 const getToolsForLangChain = (allowedModules) => {
@@ -146,7 +159,7 @@ const getToolsForLangChain = (allowedModules) => {
 /**
  * Execute tool by name
  */
-const executeTool = async (toolName, parameters, authToken) => {
+const executeTool = async (toolName, parameters, authToken, mcpPermissions = null) => {
   const tools = {
     [callGatewayEndpoint.name]: callGatewayEndpoint,
     [searchHRCandidates.name]: searchHRCandidates,
@@ -187,6 +200,23 @@ const executeTool = async (toolName, parameters, authToken) => {
   const tool = tools[toolName];
   if (!tool) {
     return { success: false, message: `Tool ${toolName} tidak ditemukan` };
+  }
+
+  // Authorize MCP client execution if mcpPermissions array is provided
+  if (mcpPermissions !== null) {
+    const reqPerm = tool.menuKey ? { menuKey: tool.menuKey, action: tool.action || 'read' } : (TOOL_PERMISSION_MAP[toolName] || { menuKey: 'GLOBAL', action: 'read' });
+    
+    if (reqPerm.menuKey !== 'GLOBAL' && reqPerm.menuKey !== 'System') {
+      const hasAccess = mcpPermissions.some(p => {
+        let actions = [];
+        try { actions = typeof p.actions === 'string' ? JSON.parse(p.actions) : (p.actions || []); } catch(e){}
+        return p.menu_id === reqPerm.menuKey && actions.includes(reqPerm.action);
+      });
+      
+      if (!hasAccess) {
+        return { success: false, message: `Unauthorized: Tool requires permission for ${reqPerm.menuKey}:${reqPerm.action}` };
+      }
+    }
   }
 
   return await tool.execute(parameters, authToken);

@@ -20,6 +20,8 @@ const { optionalSSOToken } = require('./middleware/sso');
 const { getToken } = require('./middleware/sso-auth');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
+const { AsyncLocalStorage } = require('async_hooks');
+const mcpContext = new AsyncLocalStorage();
 
 /**
  * Create MCP Server dengan tools
@@ -79,8 +81,11 @@ const registerTools = (server) => {
     server.tool(name, description, zodSchema, async (params, extra) => {
       try {
         const authToken = extra?.authInfo?.token || null;
+        const ctx = mcpContext.getStore();
+        const mcpPermissions = ctx?.mcpPermissions || [];
         logger.info(`MCP executing tool: ${name}`, params);
-        const result = await executeTool(name, params, authToken);
+        
+        const result = await executeTool(name, params, authToken, mcpPermissions);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         logger.error(`MCP tool ${name} error: ${error.message}`);
@@ -147,7 +152,46 @@ const handleMCPRequest = async (req, res) => {
     // Pakai SSO token dari auto-login
     req.auth = { token: getToken(), user: req.user };
 
-    await session.transport.handleRequest(req, res, req.body);
+    // Extract MCP Token & Permissions
+    const authHeader = req.headers.authorization;
+    let mcpPermissions = [];
+    let mcpCredentialId = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const jwtDecode = require('jwt-decode');
+        const decoded = jwtDecode(token);
+        mcpCredentialId = decoded.mcp_credential_id;
+
+        if (mcpCredentialId) {
+          const { getRedis, setRedis } = require('../../utils/redis');
+          const cacheKey = `mcp_permissions:${mcpCredentialId}`;
+          
+          let cached = null;
+          try {
+             if (getRedis) cached = await getRedis(cacheKey);
+          } catch(e) {}
+          
+          if (cached) {
+            mcpPermissions = JSON.parse(cached);
+          } else {
+            const { raw } = require('../../repository/postgres/core_postgres');
+            const result = await raw(`SELECT * FROM gate_sso_mcp_credential_permissions WHERE mcp_credential_id = '${mcpCredentialId}'`);
+            mcpPermissions = result.rows || [];
+            try {
+              if (setRedis) await setRedis(cacheKey, JSON.stringify(mcpPermissions), 3600); // 1 hour cache
+            } catch(e) {}
+          }
+        }
+      } catch (err) {
+        logger.error(`Error extracting MCP permissions: ${err.message}`);
+      }
+    }
+
+    await mcpContext.run({ mcpPermissions, mcpCredentialId }, async () => {
+      await session.transport.handleRequest(req, res, req.body);
+    });
 
     if (session.transport.sessionId && !sessionId) {
       sessions.set(session.transport.sessionId, session);
