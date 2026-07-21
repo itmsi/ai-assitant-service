@@ -2,14 +2,13 @@ const { baseResponseGeneral } = require('../../utils/exception');
 const {
   processChat,
   clearConversation,
-  initializeModel,
   getSystemPrompt,
-  convertToLangChainMessages,
+  convertToOpenAIMessages,
   summarizeConversation,
+  rawStreamChatCompletion,
 } = require('./service');
 const { getConversation, saveConversation } = require('../../utils/redis');
 const conversationRepo = require('./ai_conversations_repository');
-const { HumanMessage, AIMessage, SystemMessage, ToolMessage } = require('@langchain/core/messages');
 const { getToolsForLangChain, executeTool } = require('./tools');
 const aiConfig = require('../../config/ai');
 const { Logger } = require('../../utils/logger');
@@ -220,6 +219,7 @@ const listByUser = async (req, res) => {
 
 /**
  * Extract tool calls from model response
+ * (masih digunakan oleh processChat di service.js via LangChain path)
  */
 const extractToolCalls = (message) => {
   if (!message) return [];
@@ -339,13 +339,15 @@ const getMessageContent = (message) => {
 
 /**
  * Streaming chat endpoint using SSE (Server-Sent Events)
+ * Menggunakan raw OpenAI API call (bukan LangChain) untuk menghindari
+ * bug serialisasi tool di @langchain/openai v0.0.20.
+ *
  * Mendukung:
  * - Streaming token-by-token via SSE
  * - Function calling / tool execution (dengan looping sampai selesai)
  * - Client disconnect handling (mencegah token wastage)
  * - Conversation history dengan summarization
  * - Access control per module
- * Supports function/tool calling
  */
 const chatStream = async (req, res) => {
   const { message, sessionId, system } = req.body;
@@ -366,7 +368,7 @@ const chatStream = async (req, res) => {
   });
 
   // =========================================
-  // Client disconnect handler (P1 Fix)
+  // Client disconnect handler
   // =========================================
   let isClientConnected = true;
   req.on('close', () => {
@@ -377,7 +379,6 @@ const chatStream = async (req, res) => {
   const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
 
   try {
-    const model = initializeModel();
     let systemPrompt = await getSystemPrompt();
 
     // Build access control if provided
@@ -391,7 +392,7 @@ const chatStream = async (req, res) => {
       conversationHistory = await getConversation(userId, sessionId) || [];
     } catch { conversationHistory = []; }
 
-    // Summarize if needed — threshold konsisten dengan non-streaming (config-based)
+    // Summarize if needed
     let summaryText = '';
     const maxHistory = (aiConfig.AI_MAX_CONVERSATION_HISTORY || 10) * 2;
     if (conversationHistory.length > maxHistory) {
@@ -400,29 +401,22 @@ const chatStream = async (req, res) => {
       summaryText = summarizeConversation(oldMessages);
     }
 
-    // Build messages
-    const messages = convertToLangChainMessages(conversationHistory, systemPrompt, summaryText);
-    messages.push(new HumanMessage(message));
-
-    // =========================================
-    // Prepare model with tools (P1 Fix: tool calling support)
-    // =========================================
-    let modelToUse = model;
-    if (aiConfig.AI_ENABLE_FUNCTION_CALLING) {
-      const tools = getToolsForLangChain(system);
-      try {
-        modelToUse = model.bind({ tools });
-      } catch (bindError) {
-        logger.warn(`[Stream] Failed to bind tools: ${bindError.message}`);
-      }
-    }
+    // Get tools definitions (if function calling enabled)
+    const tools = aiConfig.AI_ENABLE_FUNCTION_CALLING
+      ? getToolsForLangChain(system)
+      : [];
 
     // =========================================
     // Streaming loop dengan tool calling support
+    // Menggunakan raw API call (bukan LangChain)
     // =========================================
     let fullResponse = '';
     let toolIterations = 0;
     const MAX_TOOL_ITERATIONS = 10;
+
+    // Build initial messages as plain OpenAI-format array
+    const openaiMessages = convertToOpenAIMessages(conversationHistory, systemPrompt, summaryText);
+    openaiMessages.push({ role: 'user', content: message });
 
     do {
       // Safety: prevent infinite tool loops
@@ -434,64 +428,39 @@ const chatStream = async (req, res) => {
 
       if (!isClientConnected) break;
 
-      // Stream model response
-      let stream;
+      // Stream via raw API call (no LangChain)
+      let iterationResponse = '';
+      let toolCalls = [];
+
       try {
-        stream = await modelToUse.stream(messages);
+        const stream = rawStreamChatCompletion(openaiMessages, tools);
+
+        for await (const chunk of stream) {
+          if (!isClientConnected) break;
+
+          if (chunk.type === 'text') {
+            iterationResponse += chunk.content;
+            res.write(`0:${JSON.stringify(chunk.content)}\n\n`);
+          } else if (chunk.type === 'tool_calls') {
+            toolCalls = chunk.toolCalls;
+          }
+        }
       } catch (streamError) {
         logger.error(`[Stream] Failed to start stream: ${streamError.message}`);
-        if (!res.headersSent) throw streamError;
         res.write(`3:${JSON.stringify({ error: streamError.message, sessionId: finalSessionId })}\n\n`);
         return res.end();
       }
 
-      const streamChunks = [];
-      let iterationResponse = '';
-
-      for await (const chunk of stream) {
-        if (!isClientConnected) break;
-
-        streamChunks.push(chunk);
-
-        // Stream text content immediately
-        const text = typeof chunk.content === 'string' ? chunk.content : '';
-        if (text) {
-          iterationResponse += text;
-          res.write(`0:${JSON.stringify(text)}\n\n`);
-        }
-      }      if (!isClientConnected) break;
+      if (!isClientConnected) break;
 
       fullResponse += iterationResponse;
 
-      // If no chunks at all, stop
-      if (streamChunks.length === 0) break;
-
-      // Merge all chunks to check for tool calls
-      const mergedMessage = streamChunks.reduce((acc, chunk) => acc.concat(chunk));
-
-      // Extract tool calls from merged message (P1 Fix: tool calling)
-      let toolCalls = extractToolCalls(mergedMessage);
-
-      // Fallback: check tool_call_chunks directly jika extractToolCalls tidak menemukan
-      if (toolCalls.length === 0 && mergedMessage.tool_call_chunks?.length > 0) {
-        toolCalls = mergedMessage.tool_call_chunks
-          .filter((tc) => tc.name)
-          .map((tc) => {
-            let args = {};
-            try {
-              args = tc.args ? JSON.parse(tc.args) : {};
-            } catch { /* args partial — parse gagal */ }
-            return {
-              id: tc.id || `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-              name: tc.name,
-              args,
-            };
-          });
-      }
-
       if (toolCalls.length === 0) {
-        // No tool calls — streaming selesai untuk iterasi ini
-        messages.push(mergedMessage);
+        // No tool calls — add assistant message and finish
+        openaiMessages.push({
+          role: 'assistant',
+          content: iterationResponse || '',
+        });
         break;
       }
 
@@ -504,8 +473,19 @@ const chatStream = async (req, res) => {
         sessionId: finalSessionId,
       })}\n\n`);
 
-      // Add assistant message with tool calls ke conversation
-      messages.push(mergedMessage);
+      // Add assistant message with tool calls
+      openaiMessages.push({
+        role: 'assistant',
+        content: iterationResponse || null,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function',
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.args || {}),
+          },
+        })),
+      });
 
       // Execute tool calls
       for (const toolCall of toolCalls) {
@@ -515,16 +495,18 @@ const chatStream = async (req, res) => {
           logger.info(`[Stream] Executing tool: ${toolCall.name}`, toolCall.args);
           const result = await executeTool(toolCall.name, toolCall.args || {}, authToken);
 
-          messages.push(new ToolMessage({
+          openaiMessages.push({
+            role: 'tool',
             content: JSON.stringify(result, null, 2),
             tool_call_id: toolCall.id,
-          }));
+          });
         } catch (toolError) {
           logger.error(`[Stream] Tool ${toolCall.name} error: ${toolError.message}`);
-          messages.push(new ToolMessage({
+          openaiMessages.push({
+            role: 'tool',
             content: JSON.stringify({ success: false, message: `Error: ${toolError.message}` }),
             tool_call_id: toolCall.id,
-          }));
+          });
         }
       }
 
@@ -545,7 +527,7 @@ const chatStream = async (req, res) => {
     res.end();
 
     // =========================================
-    // Save conversation — only ONCE (P1 Fix: double save)
+    // Save conversation — only ONCE
     // =========================================
     const historyCopy = [
       ...conversationHistory,
@@ -555,11 +537,8 @@ const chatStream = async (req, res) => {
 
     try {
       await saveConversation(userId, finalSessionId, historyCopy);
-      // saveConversation dari redis.js sudah mendelegasikan ke conversationRepo.saveConversation()
-      // Tidak perlu panggil repo.saveConversation() lagi — sudah otomatis
       logger.info(`[Stream] Conversation saved: ${finalSessionId} (${historyCopy.length} messages)`);
     } catch (saveError) {
-      // Log error instead of silent catch (P1 Fix: hidden errors)
       logger.warn(`[Stream] Failed to save conversation ${finalSessionId}: ${saveError.message}`);
     }
 
