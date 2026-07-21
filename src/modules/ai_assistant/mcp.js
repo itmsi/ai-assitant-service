@@ -184,6 +184,7 @@ const handleMCPRequest = async (req, res) => {
               WHERE p.mcp_credential_id = '${mcpCredentialId}'
             `);
             mcpPermissions = result.rows || [];
+            logger.info(`[MCP] Fetched ${mcpPermissions.length} permissions from DB for credential ${mcpCredentialId}`);
             try {
               // if (setRedis) await setRedis(cacheKey, JSON.stringify(mcpPermissions), 3600); // Redis disabled
             } catch(e) {}
