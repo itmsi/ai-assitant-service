@@ -6,6 +6,8 @@
  */
 
 const { callGatewayEndpoint, isWriteOperation } = require('./gateway');
+const { Logger } = require('../../../utils/logger');
+const logger = Logger;
 
 const { searchHRCandidates, searchHREmployees } = require('./hr');
 
@@ -207,15 +209,22 @@ const executeTool = async (toolName, parameters, authToken, mcpPermissions = nul
     const reqPerm = tool.menuKey ? { menuKey: tool.menuKey, action: tool.action || 'read' } : (TOOL_PERMISSION_MAP[toolName] || { menuKey: 'GLOBAL', action: 'read' });
     
     if (reqPerm.menuKey !== 'GLOBAL' && reqPerm.menuKey !== 'System') {
+      logger.info(`[MCP] Validating tool '${toolName}'. Required: ${reqPerm.menuKey}:${reqPerm.action}`);
       const hasAccess = mcpPermissions.some(p => {
         let actions = [];
         try { actions = typeof p.actions === 'string' ? JSON.parse(p.actions) : (p.actions || []); } catch(e){}
-        return (p.menu_key === reqPerm.menuKey || p.menu_id === reqPerm.menuKey) && actions.includes(reqPerm.action);
+        const match = (p.menu_key === reqPerm.menuKey || p.menu_id === reqPerm.menuKey) && actions.includes(reqPerm.action);
+        if (match) {
+          logger.info(`[MCP] Match found for '${toolName}': menu_key=${p.menu_key}, actions=${JSON.stringify(actions)}`);
+        }
+        return match;
       });
       
       if (!hasAccess) {
+        logger.warn(`[MCP] Access DENIED for tool '${toolName}'.`);
         return { success: false, message: `Unauthorized: Tool requires permission for ${reqPerm.menuKey}:${reqPerm.action}` };
       }
+      logger.info(`[MCP] Access GRANTED for tool '${toolName}'.`);
     }
   }
 
