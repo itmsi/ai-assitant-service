@@ -57,6 +57,17 @@ CREATE FOREIGN TABLE IF NOT EXISTS gate_sso_mcp_credential_permissions (
     )
     SERVER gate_sso_server
     OPTIONS (schema_name 'public', table_name 'mcp_credential_permissions');
+
+CREATE FOREIGN TABLE IF NOT EXISTS gate_sso_menus (
+      menu_id uuid,
+      menu_key varchar(255),
+      menu_name varchar(255),
+      menu_url varchar(255),
+      menu_icon varchar(255),
+      menu_order integer
+    )
+    SERVER gate_sso_server
+    OPTIONS (schema_name 'public', table_name 'menus');
     
 
     -- DROP
