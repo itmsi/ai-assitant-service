@@ -177,7 +177,12 @@ const handleMCPRequest = async (req, res) => {
             mcpPermissions = JSON.parse(cached);
           } else {
             const { raw } = require('../../repository/postgres/core_postgres');
-            const result = await raw(`SELECT * FROM gate_sso_mcp_credential_permissions WHERE mcp_credential_id = '${mcpCredentialId}'`);
+            const result = await raw(`
+              SELECT p.*, m.menu_key 
+              FROM gate_sso_mcp_credential_permissions p
+              LEFT JOIN gate_sso_menus m ON p.menu_id = m.menu_id
+              WHERE p.mcp_credential_id = '${mcpCredentialId}'
+            `);
             mcpPermissions = result.rows || [];
             try {
               if (setRedis) await setRedis(cacheKey, JSON.stringify(mcpPermissions), 3600); // 1 hour cache

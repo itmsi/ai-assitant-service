@@ -210,7 +210,7 @@ const executeTool = async (toolName, parameters, authToken, mcpPermissions = nul
       const hasAccess = mcpPermissions.some(p => {
         let actions = [];
         try { actions = typeof p.actions === 'string' ? JSON.parse(p.actions) : (p.actions || []); } catch(e){}
-        return p.menu_id === reqPerm.menuKey && actions.includes(reqPerm.action);
+        return (p.menu_key === reqPerm.menuKey || p.menu_id === reqPerm.menuKey) && actions.includes(reqPerm.action);
       });
       
       if (!hasAccess) {
