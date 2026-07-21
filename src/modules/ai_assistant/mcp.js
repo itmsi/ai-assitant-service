@@ -154,8 +154,10 @@ const handleMCPRequest = async (req, res) => {
 
     // Extract MCP Token & Permissions
     const authHeader = req.headers.authorization;
-    let mcpPermissions = [];
+    let mcpPermissions = null; // null = no MCP auth (bypass validation), [] = auth present but no permissions
     let mcpCredentialId = null;
+
+    logger.info(`[MCP] Incoming request. Method: ${req.method}, Authorization: ${authHeader ? 'present' : 'MISSING'}`);
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
@@ -163,20 +165,13 @@ const handleMCPRequest = async (req, res) => {
         const jwtDecode = require('jwt-decode');
         const decoded = jwtDecode(token);
         mcpCredentialId = decoded.mcp_credential_id;
+        logger.info(`[MCP] JWT decoded. mcp_credential_id: ${mcpCredentialId || 'NOT FOUND in token'}`);
 
         if (mcpCredentialId) {
-          const { getRedis, setRedis } = require('../../utils/redis');
-          const cacheKey = `mcp_permissions:${mcpCredentialId}`;
-          
-          let cached = null;
+          mcpPermissions = []; // set to empty array — will be populated from DB
           try {
-             // if (getRedis) cached = await getRedis(cacheKey); // Redis disabled
-          } catch(e) {}
-          
-          if (cached) {
-            mcpPermissions = JSON.parse(cached);
-          } else {
             const { raw } = require('../../repository/postgres/core_postgres');
+            logger.info(`[MCP] Querying permissions from DB for credential: ${mcpCredentialId}`);
             const result = await raw(`
               SELECT p.*, m.menu_key 
               FROM gate_sso_mcp_credential_permissions p
@@ -184,15 +179,21 @@ const handleMCPRequest = async (req, res) => {
               WHERE p.mcp_credential_id = '${mcpCredentialId}'
             `);
             mcpPermissions = result.rows || [];
-            logger.info(`[MCP] Fetched ${mcpPermissions.length} permissions from DB for credential ${mcpCredentialId}`);
-            try {
-              // if (setRedis) await setRedis(cacheKey, JSON.stringify(mcpPermissions), 3600); // Redis disabled
-            } catch(e) {}
+            logger.info(`[MCP] Fetched ${mcpPermissions.length} permissions from DB for credential ${mcpCredentialId}: ${JSON.stringify(mcpPermissions.map(p => ({ menu_key: p.menu_key, actions: p.actions })))}`);
+          } catch (dbErr) {
+            logger.error(`[MCP] DB query failed: ${dbErr.message}`);
           }
+        } else {
+          // Token valid tapi tidak ada mcp_credential_id — bypass validasi
+          logger.warn(`[MCP] JWT has no mcp_credential_id. Skipping permission validation.`);
+          mcpPermissions = null;
         }
       } catch (err) {
-        logger.error(`Error extracting MCP permissions: ${err.message}`);
+        logger.error(`[MCP] Error extracting MCP permissions: ${err.message}`);
+        mcpPermissions = null;
       }
+    } else {
+      logger.info(`[MCP] No Bearer token. Skipping permission validation.`);
     }
 
     await mcpContext.run({ mcpPermissions, mcpCredentialId }, async () => {
