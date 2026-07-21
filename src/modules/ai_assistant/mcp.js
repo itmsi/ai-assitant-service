@@ -164,7 +164,7 @@ const handleMCPRequest = async (req, res) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       // Tidak ada token → kembalikan 401 + WWW-Authenticate agar Cloud AI tahu harus OAuth dulu
       logger.warn(`[MCP] No Bearer token found. Returning 401 to trigger OAuth flow.`);
-      res.setHeader('WWW-Authenticate', `Bearer realm="${MCP_BASE_URL}", resource_metadata="${MCP_BASE_URL}/.well-known/oauth-protected-resource"`);
+      res.setHeader('WWW-Authenticate', `Bearer realm="${MCP_BASE_URL}", resource_metadata="${MCP_BASE_URL}/.well-known/oauth-protected-resource/mcp"`);
       return res.status(401).json({
         error: 'unauthorized',
         error_description: 'Bearer token required. Please authenticate via OAuth first.',
