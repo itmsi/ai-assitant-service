@@ -170,7 +170,7 @@ const handleMCPRequest = async (req, res) => {
           
           let cached = null;
           try {
-             if (getRedis) cached = await getRedis(cacheKey);
+             // if (getRedis) cached = await getRedis(cacheKey); // Redis disabled
           } catch(e) {}
           
           if (cached) {
@@ -185,7 +185,7 @@ const handleMCPRequest = async (req, res) => {
             `);
             mcpPermissions = result.rows || [];
             try {
-              if (setRedis) await setRedis(cacheKey, JSON.stringify(mcpPermissions), 3600); // 1 hour cache
+              // if (setRedis) await setRedis(cacheKey, JSON.stringify(mcpPermissions), 3600); // Redis disabled
             } catch(e) {}
           }
         }
