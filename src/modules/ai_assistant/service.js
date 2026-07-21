@@ -6,6 +6,7 @@ const logger = Logger;
 const { getConversation, saveConversation } = require('../../utils/redis');
 const { getToolsForLangChain, executeTool } = require('./tools');
 const { getActivePromptByKey } = require('./ai_prompts_repository');
+const OpenAI = require('openai');
 
 // Cache untuk system prompt (untuk menghindari query berulang)
 let systemPromptCache = {
@@ -200,7 +201,155 @@ const convertToLangChainMessages = (conversationHistory, systemPrompt, summaryTe
 };
 
 /**
- * Convert LangChain messages to conversation history format
+ * Convert messages from Redis/conversation history to OpenAI API format (plain JSON)
+ * @param {Array} conversationHistory - Conversation history from Redis
+ * @param {string} systemPrompt - System prompt content
+ * @param {string} summaryText - Optional summary of older conversation
+ * @returns {Array} Messages in OpenAI API format [{ role, content }, ...]
+ */
+const convertToOpenAIMessages = (conversationHistory, systemPrompt, summaryText) => {
+  const messages = [];
+
+  // Add system message with optional summary
+  let finalPrompt = systemPrompt;
+  if (summaryText) {
+    finalPrompt += `\n\n**Ringkasan Percakapan Sebelumnya:**\n${summaryText}`;
+  }
+  messages.push({ role: 'system', content: finalPrompt });
+
+  // Convert conversation history
+  if (conversationHistory && Array.isArray(conversationHistory)) {
+    conversationHistory.forEach((msg) => {
+      if (msg.role === 'user') {
+        messages.push({ role: 'user', content: msg.content });
+      } else if (msg.role === 'assistant') {
+        // Check if this message has tool_calls (from a previous assistant response)
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          messages.push({
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: msg.tool_calls.map(tc => ({
+              id: tc.id,
+              type: 'function',
+              function: {
+                name: tc.function?.name || tc.name,
+                arguments: typeof tc.function?.arguments === 'string' 
+                  ? tc.function.arguments 
+                  : JSON.stringify(tc.function?.arguments || tc.args || {}),
+              },
+            })),
+          });
+        } else {
+          messages.push({ role: 'assistant', content: msg.content });
+        }
+      } else if (msg.role === 'tool') {
+        messages.push({
+          role: 'tool',
+          content: msg.content,
+          tool_call_id: msg.tool_call_id,
+        });
+      }
+    });
+  }
+
+  return messages;
+};
+
+/**
+ * Get AI provider configuration for raw API calls
+ */
+const getProviderConfig = () => {
+  if (aiConfig.AI_MODEL_PROVIDER === 'sumopod') {
+    return {
+      apiKey: aiConfig.SUMOPOD_API_KEY,
+      baseURL: (aiConfig.SUMOPOD_BASE_URL || '').replace(/\/+$/, ''),
+      model: aiConfig.SUMOPOD_MODEL,
+      temperature: aiConfig.SUMOPOD_TEMPERATURE,
+      maxTokens: aiConfig.SUMOPOD_MAX_TOKENS,
+    };
+  }
+  // Default: OpenAI
+  return {
+    apiKey: aiConfig.OPENAI_API_KEY,
+    baseURL: 'https://api.openai.com/v1',
+    model: aiConfig.OPENAI_MODEL,
+    temperature: aiConfig.OPENAI_TEMPERATURE,
+    maxTokens: aiConfig.OPENAI_MAX_TOKENS,
+  };
+};
+
+/**
+ * Raw streaming chat completion via OpenAI SDK (bypasses @langchain/openai v0.0.20 bug)
+ * 
+ * @param {Array} openaiMessages - Messages in OpenAI API format
+ * @param {Array} tools - Tools from getToolsForLangChain (already in OpenAI format)
+ * @yields {{ type: 'text', content: string } | { type: 'tool_calls', toolCalls: Array }}
+ */
+async function* rawStreamChatCompletion(openaiMessages, tools) {
+  const config = getProviderConfig();
+  const openai = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+  });
+
+  const stream = await openai.chat.completions.create({
+    model: config.model,
+    messages: openaiMessages,
+    tools: tools && tools.length > 0 ? tools : undefined,
+    temperature: config.temperature,
+    max_tokens: config.maxTokens,
+    stream: true,
+  });
+
+  const toolCallAccum = {}; // { [index]: { id, type, function: { name, arguments } } }
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta;
+    if (!delta) continue;
+
+    // Text content
+    if (delta.content) {
+      yield { type: 'text', content: delta.content };
+    }
+
+    // Tool calls (accumulated by index across chunks)
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const index = tc.index;
+        if (!toolCallAccum[index]) {
+          toolCallAccum[index] = {
+            id: tc.id || '',
+            type: 'function',
+            function: { name: '', arguments: '' },
+          };
+        }
+        if (tc.id) toolCallAccum[index].id = tc.id;
+        if (tc.function?.name) toolCallAccum[index].function.name += tc.function.name;
+        if (tc.function?.arguments) toolCallAccum[index].function.arguments += tc.function.arguments;
+      }
+    }
+  }
+
+  // Yield accumulated tool calls after stream ends
+  const toolCalls = Object.values(toolCallAccum)
+    .filter(tc => tc.function.name)
+    .map(tc => {
+      let args = {};
+      try { args = JSON.parse(tc.function.arguments || '{}'); } catch { args = {}; }
+      return {
+        id: tc.id || `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: tc.function.name,
+        args,
+      };
+    });
+
+  if (toolCalls.length > 0) {
+    yield { type: 'tool_calls', toolCalls };
+  }
+}
+
+/**
+ * LangChain version: Convert LangChain messages to conversation history format
  */
 const convertFromLangChainMessages = (messages) => {
   return messages
@@ -342,7 +491,7 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
     // Append allowed modules instruction if provided (even if empty array)
     if (Array.isArray(allowedModules)) {
       const modulesList = allowedModules.join(', ');
-      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${modulesList}].\nYou are PROHIBITED from providing any data, information, or assistance related to modules NOT in this list.\n\nCRITICAL RULE: If the user's message mentions a restricted module (e.g., asking about "CRM", "HR", "Employee" when these are not in the list), you must REFUSE IMPLICITLY AND IMMEDIATELY, even if you think you have tools that could answer part of the question. The presence of the restricted word in the context of a data request is grounds for refusal.\n\nRefusal Response:\n"Mohon maaf, Anda tidak memiliki hak akses untuk module tersebut."\n\nDo not explain why. Do not try to bypass this by using similar tools from other modules. STOP and return the refusal response.`;
+      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${modulesList}].\nYou are PROHIBITED from providing any data, information, or assistance related to modules NOT in this list.\n\nCRITICAL RULE: If the user's message mentions a restricted module (e.g., asking about \"CRM\", \"HR\", \"Employee\" when these are not in the list), you must REFUSE IMPLICITLY AND IMMEDIATELY, even if you think you have tools that could answer part of the question. The presence of the restricted word in the context of a data request is grounds for refusal.\n\nRefusal Response:\n\"Mohon maaf, Anda tidak memiliki hak akses untuk module tersebut.\"\n\nDo not explain why. Do not try to bypass this by using similar tools from other modules. STOP and return the refusal response.`;
     }
 
     // Get conversation history (fallback to empty array if Redis not available)
@@ -520,4 +669,7 @@ module.exports = {
   convertToLangChainMessages,
   summarizeConversation,
   extractToolCalls,
+  convertToOpenAIMessages,
+  getProviderConfig,
+  rawStreamChatCompletion,
 };

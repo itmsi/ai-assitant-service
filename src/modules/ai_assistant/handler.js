@@ -6,7 +6,6 @@ const {
   getSystemPrompt,
   convertToLangChainMessages,
   summarizeConversation,
-  extractToolCalls,
 } = require('./service');
 const { getConversation, saveConversation } = require('../../utils/redis');
 const conversationRepo = require('./ai_conversations_repository');
@@ -169,7 +168,37 @@ const listByUser = async (req, res) => {
       });
     }
 
-    const conversations = await conversationRepo.getConversationsByUserId(userId);
+    let conversations = await conversationRepo.getConversationsByUserId(userId);
+
+    // Extract first message content from each conversation for sidebar preview
+    conversations = conversations.map((conv) => {
+      const item = { ...conv };
+      
+      // Parse messages to get first user message
+      if (item.messages) {
+        try {
+          const messages = typeof item.messages === 'string'
+            ? JSON.parse(item.messages)
+            : item.messages;
+          
+          // Find first user message
+          const firstUserMsg = Array.isArray(messages)
+            ? messages.find((m) => m.role === 'user')
+            : null;
+          
+          item.first_message = firstUserMsg
+            ? firstUserMsg.content.substring(0, 100)
+            : '';
+        } catch {
+          item.first_message = '';
+        }
+        delete item.messages; // Remove raw messages from response
+      } else {
+        item.first_message = '';
+      }
+      
+      return item;
+    });
 
     return baseResponseGeneral(res, {
       success: true,
@@ -190,6 +219,125 @@ const listByUser = async (req, res) => {
 };
 
 /**
+ * Extract tool calls from model response
+ */
+const extractToolCalls = (message) => {
+  if (!message) return [];
+
+  const rawToolCalls = [];
+
+  if (Array.isArray(message.tool_calls)) {
+    rawToolCalls.push(...message.tool_calls);
+  }
+
+  if (Array.isArray(message.additional_kwargs?.tool_calls)) {
+    rawToolCalls.push(...message.additional_kwargs.tool_calls);
+  }
+
+  if (message.tool_call) {
+    rawToolCalls.push(message.tool_call);
+  }
+
+  if (message.additional_kwargs?.function_call) {
+    rawToolCalls.push(message.additional_kwargs.function_call);
+  }
+
+  if (message.function_call) {
+    rawToolCalls.push(message.function_call);
+  }
+
+  return rawToolCalls
+    .map((call, index) => normalizeToolCall(call, index))
+    .filter((call) => call && call.name);
+};
+
+const normalizeToolCall = (toolCall, index = 0) => {
+  if (!toolCall) return null;
+
+  const generatedId = `tool_call_${Date.now()}_${index}`;
+
+  if (toolCall.id || toolCall.tool_call_id) {
+    return {
+      id: toolCall.id || toolCall.tool_call_id,
+      name:
+        toolCall.name
+        || toolCall.function?.name
+        || toolCall.additional_kwargs?.function_call?.name,
+      args: parseToolArguments(
+        toolCall.args
+        || toolCall.function?.arguments
+        || toolCall.additional_kwargs?.function_call?.arguments
+        || toolCall.arguments
+      ),
+    };
+  }
+
+  return {
+    id: generatedId,
+    name:
+      toolCall.name
+      || toolCall.function?.name
+      || toolCall.additional_kwargs?.function_call?.name,
+    args: parseToolArguments(
+      toolCall.args
+      || toolCall.function?.arguments
+      || toolCall.additional_kwargs?.function_call?.arguments
+      || toolCall.arguments
+    ),
+  };
+};
+
+const parseToolArguments = (args) => {
+  if (!args) return {};
+
+  if (typeof args === 'object') {
+    return args;
+  }
+
+  try {
+    return JSON.parse(args);
+  } catch (error) {
+    logger.warn(`Failed to parse tool arguments: ${error.message || error}`);
+    return {};
+  }
+};
+
+const getMessageContent = (message) => {
+  if (!message) return '';
+
+  const { content } = message;
+
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.content === 'string') return part.content;
+        if (Array.isArray(part?.content)) {
+          return part.content
+            .map((nested) => (typeof nested === 'string' ? nested : nested?.text || ''))
+            .filter(Boolean)
+            .join('\n');
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  if (content && typeof content === 'object' && typeof content.text === 'string') {
+    return content.text;
+  }
+
+  return '';
+};
+
+/**
  * Streaming chat endpoint using SSE (Server-Sent Events)
  * Mendukung:
  * - Streaming token-by-token via SSE
@@ -197,6 +345,7 @@ const listByUser = async (req, res) => {
  * - Client disconnect handling (mencegah token wastage)
  * - Conversation history dengan summarization
  * - Access control per module
+ * Supports function/tool calling
  */
 const chatStream = async (req, res) => {
   const { message, sessionId, system } = req.body;
@@ -310,9 +459,7 @@ const chatStream = async (req, res) => {
           iterationResponse += text;
           res.write(`0:${JSON.stringify(text)}\n\n`);
         }
-      }
-
-      if (!isClientConnected) break;
+      }      if (!isClientConnected) break;
 
       fullResponse += iterationResponse;
 
@@ -424,6 +571,7 @@ const chatStream = async (req, res) => {
 
     logger.error(`[Stream] Error for session ${finalSessionId}: ${error.message}`);
 
+    logger.error('Stream error: ' + error.message);
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, message: error.message }));
@@ -442,4 +590,5 @@ module.exports = {
   clearHistory,
   listByUser,
   chatStream,
+  extractToolCalls,
 };

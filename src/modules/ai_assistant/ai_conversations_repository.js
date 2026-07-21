@@ -111,7 +111,7 @@ const getConversationsByUserId = async (userId) => {
     const conversations = await db('ai_conversations')
       .where({ user_id: userId })
       .orderBy('last_message_at', 'desc')
-      .select('session_id', 'user_id', 'message_count', 'last_message_at', 'created_at', 'updated_at');
+      .select('session_id', 'user_id', 'message_count', 'last_message_at', 'created_at', 'updated_at', 'messages');
 
     logger.debug(`Conversations loaded for user: ${userId} (${conversations.length} sessions)`);
     return conversations;
