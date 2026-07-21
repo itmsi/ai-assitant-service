@@ -82,8 +82,9 @@ const registerTools = (server) => {
       try {
         const authToken = extra?.authInfo?.token || null;
         const ctx = mcpContext.getStore();
-        const mcpPermissions = ctx?.mcpPermissions || [];
-        logger.info(`MCP executing tool: ${name}`, params);
+        // Gunakan ?? bukan || agar null (bypass validation) tidak dikonversi jadi []
+        const mcpPermissions = ctx?.mcpPermissions ?? null;
+        logger.info(`[MCP] Tool '${name}' called. mcpPermissions: ${mcpPermissions === null ? 'null (bypass)' : `array[${mcpPermissions.length}]`}`);
         
         const result = await executeTool(name, params, authToken, mcpPermissions);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
@@ -154,46 +155,59 @@ const handleMCPRequest = async (req, res) => {
 
     // Extract MCP Token & Permissions
     const authHeader = req.headers.authorization;
-    let mcpPermissions = null; // null = no MCP auth (bypass validation), [] = auth present but no permissions
+    let mcpPermissions = null;
     let mcpCredentialId = null;
 
+    const MCP_BASE_URL = process.env.MCP_BASE_URL || `http://localhost:${process.env.AI_ASSISTANT_PORT || 9588}`;
     logger.info(`[MCP] Incoming request. Method: ${req.method}, Authorization: ${authHeader ? 'present' : 'MISSING'}`);
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      try {
-        const jwtDecode = require('jwt-decode');
-        const decoded = jwtDecode(token);
-        mcpCredentialId = decoded.mcp_credential_id;
-        logger.info(`[MCP] JWT decoded. mcp_credential_id: ${mcpCredentialId || 'NOT FOUND in token'}`);
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // Tidak ada token → kembalikan 401 + WWW-Authenticate agar Cloud AI tahu harus OAuth dulu
+      logger.warn(`[MCP] No Bearer token found. Returning 401 to trigger OAuth flow.`);
+      res.setHeader('WWW-Authenticate', `Bearer realm="${MCP_BASE_URL}", resource_metadata="${MCP_BASE_URL}/.well-known/oauth-protected-resource"`);
+      return res.status(401).json({
+        error: 'unauthorized',
+        error_description: 'Bearer token required. Please authenticate via OAuth first.',
+        metadata_url: `${MCP_BASE_URL}/.well-known/oauth-authorization-server`,
+      });
+    }
 
-        if (mcpCredentialId) {
-          mcpPermissions = []; // set to empty array — will be populated from DB
-          try {
-            const { raw } = require('../../repository/postgres/core_postgres');
-            logger.info(`[MCP] Querying permissions from DB for credential: ${mcpCredentialId}`);
-            const result = await raw(`
-              SELECT p.*, m.menu_key 
-              FROM gate_sso_mcp_credential_permissions p
-              LEFT JOIN gate_sso_menus m ON p.menu_id = m.menu_id
-              WHERE p.mcp_credential_id = '${mcpCredentialId}'
-            `);
-            mcpPermissions = result.rows || [];
-            logger.info(`[MCP] Fetched ${mcpPermissions.length} permissions from DB for credential ${mcpCredentialId}: ${JSON.stringify(mcpPermissions.map(p => ({ menu_key: p.menu_key, actions: p.actions })))}`);
-          } catch (dbErr) {
-            logger.error(`[MCP] DB query failed: ${dbErr.message}`);
-          }
-        } else {
-          // Token valid tapi tidak ada mcp_credential_id — bypass validasi
-          logger.warn(`[MCP] JWT has no mcp_credential_id. Skipping permission validation.`);
-          mcpPermissions = null;
+    const token = authHeader.split(' ')[1];
+    try {
+      const jwtDecode = require('jwt-decode');
+      const decoded = jwtDecode(token);
+      mcpCredentialId = decoded.mcp_credential_id;
+      logger.info(`[MCP] JWT decoded. mcp_credential_id: ${mcpCredentialId || 'NOT FOUND in token'}`);
+
+      if (mcpCredentialId) {
+        mcpPermissions = []; // akan diisi dari DB
+        try {
+          const { raw } = require('../../repository/postgres/core_postgres');
+          logger.info(`[MCP] Querying permissions from DB for credential: ${mcpCredentialId}`);
+          const result = await raw(`
+            SELECT p.*, m.menu_key 
+            FROM gate_sso_mcp_credential_permissions p
+            LEFT JOIN gate_sso_menus m ON p.menu_id = m.menu_id
+            WHERE p.mcp_credential_id = '${mcpCredentialId}'
+          `);
+          mcpPermissions = result.rows || [];
+          logger.info(`[MCP] Fetched ${mcpPermissions.length} permissions: ${JSON.stringify(mcpPermissions.map(p => ({ menu_key: p.menu_key, actions: p.actions })))}`);
+        } catch (dbErr) {
+          logger.error(`[MCP] DB query failed: ${dbErr.message}`);
+          mcpPermissions = []; // DB error → kosong → semua tool DENIED
         }
-      } catch (err) {
-        logger.error(`[MCP] Error extracting MCP permissions: ${err.message}`);
-        mcpPermissions = null;
+      } else {
+        // Token valid (dari SSO misalnya) tapi tidak ada mcp_credential_id → tidak punya akses tool
+        logger.warn(`[MCP] JWT valid but no mcp_credential_id. All tools will be DENIED.`);
+        mcpPermissions = [];
       }
-    } else {
-      logger.info(`[MCP] No Bearer token. Skipping permission validation.`);
+    } catch (err) {
+      logger.error(`[MCP] JWT decode failed: ${err.message}. Returning 401.`);
+      res.setHeader('WWW-Authenticate', `Bearer realm="${MCP_BASE_URL}", error="invalid_token", error_description="Token is invalid or expired"`);
+      return res.status(401).json({
+        error: 'invalid_token',
+        error_description: 'Token is invalid or expired. Please re-authenticate.',
+      });
     }
 
     await mcpContext.run({ mcpPermissions, mcpCredentialId }, async () => {
