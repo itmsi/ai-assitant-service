@@ -197,9 +197,13 @@ const handleMCPRequest = async (req, res) => {
           mcpPermissions = []; // DB error → kosong → semua tool DENIED
         }
       } else {
-        // Token valid (dari SSO misalnya) tapi tidak ada mcp_credential_id → tidak punya akses tool
-        logger.warn(`[MCP] JWT valid but no mcp_credential_id. All tools will be DENIED.`);
-        mcpPermissions = [];
+        // Token valid (dari SSO misalnya) tapi tidak ada mcp_credential_id → tolak dengan 401
+        logger.warn(`[MCP] JWT valid but no mcp_credential_id. Returning 401.`);
+        res.setHeader('WWW-Authenticate', `Bearer realm="${MCP_BASE_URL}", error="invalid_token", error_description="Token is not a valid MCP token (missing mcp_credential_id)"`);
+        return res.status(401).json({
+          error: 'invalid_token',
+          error_description: 'Provided token is not a valid MCP token (missing mcp_credential_id). Please authenticate via MCP OAuth flow.',
+        });
       }
     } catch (err) {
       logger.error(`[MCP] JWT decode failed: ${err.message}. Returning 401.`);
