@@ -129,6 +129,36 @@ const aiAssistantSchemas = {
       success: { type: 'boolean', example: false },
       message: { type: 'string', example: 'Terjadi kesalahan saat memproses chat' }
     }
+  },
+  AiHistorySessionItem: {
+    type: 'object',
+    properties: {
+      session_id: { type: 'string', example: 'session_user123_1730967435000' },
+      user_id: { type: 'string', example: 'f0b57258-5f33-4e03-81f7-cd70d833b5c5' },
+      message_count: { type: 'integer', example: 12 },
+      last_message_at: { type: 'string', format: 'date-time' },
+      created_at: { type: 'string', format: 'date-time' },
+      updated_at: { type: 'string', format: 'date-time' }
+    }
+  },
+  AiHistoryListResponseData: {
+    type: 'object',
+    properties: {
+      userId: { type: 'string', example: 'f0b57258-5f33-4e03-81f7-cd70d833b5c5' },
+      total: { type: 'integer', example: 5 },
+      conversations: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/AiHistorySessionItem' }
+      }
+    }
+  },
+  AiHistoryListResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Daftar riwayat percakapan berhasil diambil' },
+      data: { $ref: '#/components/schemas/AiHistoryListResponseData' }
+    }
   }
 };
 

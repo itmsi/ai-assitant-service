@@ -1,5 +1,8 @@
 // make sure for crashing handler continues to run
+const http = require('http');
 const app = require('./app')
+const { Server: SocketIOServer } = require('socket.io');
+const { registerSocketHandlers } = require('./modules/ai_assistant/socket-handler');
 const { initRedis, closeRedis } = require('./utils/redis')
 
 process.on('warning', (warning) => {
@@ -37,6 +40,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   console.info('SIGINT received')
   await closeRedis()
+  io.close()
   process.exit(0)
 })
 
@@ -45,9 +49,25 @@ if (process.env.REDIS_ENABLED === 'true') {
   initRedis()
 }
 
-app.listen(process.env.APP_PORT, () => {
+// =============================================
+// Socket.IO — mounted on /api/mosa/ai-assistant/websocket
+// =============================================
+const server = http.createServer(app);
+const io = new SocketIOServer(server, {
+  path: '/api/mosa/ai-assistant/websocket',
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+  transports: ['websocket', 'polling'],
+});
+
+registerSocketHandlers(io);
+
+server.listen(process.env.APP_PORT, () => {
   if (process.env.NODE_ENV === 'development') {
     console.info(`${process?.env.APP_NAME} running in port ${process.env.APP_PORT}`)
+    console.info(`Socket.IO: ws://localhost:${process.env.APP_PORT}/api/mosa/ai-assistant/websocket`)
   } else {
     console.info(`${process?.env.APP_NAME} is running`)
   }
