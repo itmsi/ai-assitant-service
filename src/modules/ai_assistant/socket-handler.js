@@ -18,6 +18,7 @@ const { getConversation, saveConversation } = require('../../utils/redis');
 const { getToolsForLangChain, executeTool } = require('./tools');
 const aiConfig = require('../../config/ai');
 const { Logger } = require('../../utils/logger');
+const { verifyTokenWithSSO, decodeJWT } = require('./middleware/sso');
 const logger = Logger;
 
 /**
@@ -25,8 +26,60 @@ const logger = Logger;
  * @param {import('socket.io').Server} io - Socket.IO server instance
  */
 const registerSocketHandlers = (io) => {
+  // =============================================
+  // Socket.IO Authentication Middleware
+  // Verifikasi token saat handshake — sebelum connection diterima
+  // =============================================
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+
+    if (!token) {
+      // Tanpa token tetap boleh connect, tapi jadi anonymous
+      socket.data.user = null;
+      socket.data.authToken = null;
+      socket.data.isAuthenticated = false;
+      logger.info(`[Socket] ${socket.id} connecting without token (anonymous)`);
+      return next();
+    }
+
+    // Coba verifikasi ke SSO server dulu, fallback ke JWT decode
+    const ssoResult = await verifyTokenWithSSO(token);
+
+    if (ssoResult === null) {
+      // SSO server unreachable — fallback JWT decode
+      const jwtResult = decodeJWT(token);
+      if (jwtResult.valid) {
+        socket.data.user = jwtResult.user;
+        socket.data.authToken = token;
+        socket.data.isAuthenticated = true;
+        socket.data.authMethod = 'jwt-fallback';
+        logger.info(`[Socket] ${socket.id} authenticated via JWT fallback: ${jwtResult.user.sub || jwtResult.user.userId || 'unknown'}`);
+        return next();
+      }
+      // JWT juga gagal — reject
+      logger.warn(`[Socket] ${socket.id} authentication failed (JWT): ${jwtResult.error}`);
+      return next(new Error(`Autentikasi gagal: ${jwtResult.error}`));
+    }
+
+    if (!ssoResult.valid) {
+      logger.warn(`[Socket] ${socket.id} authentication failed (SSO): ${ssoResult.error}`);
+      return next(new Error(`Token SSO tidak valid: ${ssoResult.error}`));
+    }
+
+    // Sukses via SSO server
+    socket.data.user = ssoResult.user;
+    socket.data.authToken = token;
+    socket.data.isAuthenticated = true;
+    socket.data.authMethod = 'sso-server';
+    logger.info(`[Socket] ${socket.id} authenticated via SSO server: ${ssoResult.user.sub || ssoResult.user.userId || ssoResult.user.employee_id || 'unknown'}`);
+    next();
+  });
+
   io.on('connection', (socket) => {
-    logger.info(`[Socket] Client connected: ${socket.id}`);
+    const authStatus = socket.data.isAuthenticated
+      ? `authenticated (${socket.data.authMethod})`
+      : 'anonymous';
+    logger.info(`[Socket] Client connected: ${socket.id} (${authStatus})`);
 
     // isClientConnected di scope connection — shared semua chat:send dari socket ini
     let isClientConnected = true;
@@ -37,15 +90,16 @@ const registerSocketHandlers = (io) => {
     });
 
     socket.on('chat:send', async (payload) => {
-      const { message, sessionId, system, userId: payloadUserId, token } = payload || {};
+      const { message, sessionId, system, userId: payloadUserId } = payload || {};
+      // Token dari handshake auth, bukan dari payload message
+      const authToken = socket.data.authToken;
 
       if (!message || typeof message !== 'string' || message.trim().length === 0) {
         socket.emit('chat:error', { message: 'Pesan tidak boleh kosong' });
         return;
       }
 
-      const userId = payloadUserId || 'anonymous';
-      const authToken = token || null;
+      const userId = payloadUserId || socket.data.user?.sub || socket.data.user?.userId || socket.data.user?.employee_id || 'anonymous';
       let finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
 
       try {
@@ -53,7 +107,7 @@ const registerSocketHandlers = (io) => {
 
         // Build access control if provided
         if (Array.isArray(system)) {
-          systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${system.join(', ')}].\nYou are PROHIBITED from providing any data, information, or assistance related to modules NOT in this list.\n\nCRITICAL RULE: If the user's message mentions a restricted module (e.g., asking about \"CRM\", \"HR\", \"Employee\" when these are not in the list), you must REFUSE IMPLICITLY AND IMMEDIATELY, even if you think you have tools that could answer part of the question. The presence of the restricted word in the context of a data request is grounds for refusal.\n\nRefusal Response:\n\"Mohon maaf, Anda tidak memiliki hak akses untuk module tersebut.\"\n\nDo not explain why. Do not try to bypass this by using similar tools from other modules. STOP and return the refusal response.`;
+          systemPrompt += `\n\n📋 **Access Control — perhatikan hak akses pengguna.**\nUser memiliki akses ke module berikut: [${system.join(', ')}].\nModule lain di luar daftar ini TIDAK boleh diakses.\nJika pengguna menanyakan module yang tidak ada dalam daftar aksesnya, tolak dengan sopan menggunakan bahasamu sendiri — jangan berikan data dari module yang tidak diizinkan.`;
         }
 
         // Load conversation history
@@ -156,6 +210,7 @@ const registerSocketHandlers = (io) => {
 
             try {
               logger.info(`[Socket] Executing tool: ${toolCall.name}`, toolCall.args);
+
               const result = await executeTool(toolCall.name, toolCall.args || {}, authToken);
 
               openaiMessages.push({

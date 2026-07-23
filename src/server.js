@@ -60,6 +60,9 @@ const io = new SocketIOServer(server, {
     methods: ['GET', 'POST'],
   },
   transports: ['websocket', 'polling'],
+  pingInterval: 30000,      // Kirim ping tiap 30 detik
+  pingTimeout: 60000,       // Tunggu response ping sampai 60 detik (naik dari default 20s)
+  maxHttpBufferSize: 5e6,   // 5MB buffer size untuk response besar (naik dari default 1MB)
 });
 
 registerSocketHandlers(io);
