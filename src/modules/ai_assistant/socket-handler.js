@@ -107,7 +107,7 @@ const registerSocketHandlers = (io) => {
 
         // Build access control if provided
         if (Array.isArray(system)) {
-          systemPrompt += `\n\n📋 **Access Control — perhatikan hak akses pengguna.**\nUser memiliki akses ke module berikut: [${system.join(', ')}].\nModule lain di luar daftar ini TIDAK boleh diakses.\nJika pengguna menanyakan module yang tidak ada dalam daftar aksesnya, tolak dengan sopan menggunakan bahasamu sendiri — jangan berikan data dari module yang tidak diizinkan.`;
+          systemPrompt += `\n\n📋 **ACCESS CONTROL**\nUser memiliki akses ke module-module ini: [${system.join(', ')}].\n✅ Kamu BOLEH mengambil data dan menggunakan tools dari module-module tersebut.\n❌ Kamu TIDAK BOLEH mengakses data atau menggunakan tools dari module di luar daftar.\n\nJika user bertanya tentang sesuatu, cek apakah permintaannya termasuk dalam module yang diizinkan. Jika YA → lanjutkan normal dan gunakan tools yang tersedia. Jika TIDAK (permintaan jelas tentang module di luar daftar) → tolak dengan sopan.`;
         }
 
         // Load conversation history
