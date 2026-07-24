@@ -1,4 +1,4 @@
-const { raw } = require('./src/repository/postgres/core_postgres');
+const { raw } = require('../src/repository/postgres/core_postgres');
 
 async function test() {
   try {
