@@ -491,7 +491,7 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
     // Append allowed modules instruction if provided (even if empty array)
     if (Array.isArray(allowedModules)) {
       const modulesList = allowedModules.join(', ');
-      systemPrompt += `\n\n*** STRICT ACCESS CONTROL ***\nUser Rights: The user ONLY has access to the following modules: [${modulesList}].\nYou are PROHIBITED from providing any data, information, or assistance related to modules NOT in this list.\n\nCRITICAL RULE: If the user's message mentions a restricted module (e.g., asking about \"CRM\", \"HR\", \"Employee\" when these are not in the list), you must REFUSE IMPLICITLY AND IMMEDIATELY, even if you think you have tools that could answer part of the question. The presence of the restricted word in the context of a data request is grounds for refusal.\n\nRefusal Response:\n\"Mohon maaf, Anda tidak memiliki hak akses untuk module tersebut.\"\n\nDo not explain why. Do not try to bypass this by using similar tools from other modules. STOP and return the refusal response.`;
+      systemPrompt += `\n\n📋 **ACCESS CONTROL**\nThe user has access to these modules: [${modulesList}].\n✅ You MAY fetch data and use tools from these modules.\n❌ You MUST NOT access data or use tools from any module NOT in this list.\n\nWhen the user asks about something, check if their request falls under one of their allowed modules. If YES → proceed normally and use the available tools. If NO (the request is clearly about a module NOT in their list) → politely refuse.`;
     }
 
     // Get conversation history (fallback to empty array if Redis not available)
