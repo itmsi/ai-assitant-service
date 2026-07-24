@@ -18,7 +18,7 @@ const { getMCPRouter } = require('./mcp');
 const { createOAuthRouter } = require('./oauth');
 const { login: ssoLogin } = require('./middleware/sso-auth');
 
-const PORT = process.env.AI_ASSISTANT_PORT || 9588;
+const PORT = process.env.APP_PORT || 9587;
 const app = express();
 
 // Trust proxy (nginx/cloudflare di belakang)
