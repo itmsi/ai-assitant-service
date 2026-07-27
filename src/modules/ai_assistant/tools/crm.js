@@ -152,6 +152,7 @@ const deleteCRMSegmentation = buildTool('segmentation', 'segmentation', 'DELETE'
 //  Swagger: customer_data, iup_customers (nested objects)
 // ═══════════════════════════════════════════════════════════════
 const searchCRMIUPCustomers = buildTool('iup_customers', 'iup_customers', 'GET', 'iup_management_crm', [
+  { name: 'iup_id', schema: { type: 'string' } },
   { name: 'mine_type', schema: { type: 'string' } },
   { name: 'status', schema: { type: 'string' } },
   { name: 'is_admin', schema: { type: 'string' } },
@@ -263,7 +264,9 @@ const deleteCRMIUPZone = buildTool('iup_zone', 'iup_zone', 'DELETE');
 // ═══════════════════════════════════════════════════════════════
 //  IUP SEGMENTATIONS
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'GET', 'iup_management_crm');
+const searchCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'GET', 'iup_management_crm', [
+  { name: 'iup_id', schema: { type: 'string' } },
+]);
 const createCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'CREATE', 'iup_management_crm', [], [
   { name: 'iup_id', schema: { type: 'string' }, required: true },
   { name: 'segmentation_id', schema: { type: 'string' }, required: true },
@@ -314,7 +317,9 @@ const deleteCRMDailyTask = buildTool('daily_task_activity', 'daily_task_activity
 // ═══════════════════════════════════════════════════════════════
 //  IUP CONTRACTOR
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'GET', 'iup_management_crm');
+const searchCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'GET', 'iup_management_crm', [
+  { name: 'iup_id', schema: { type: 'string' } },
+]);
 const createCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'CREATE', 'iup_management_crm', [], [
   { name: 'contractor_name', schema: { type: 'string' }, required: true },
   { name: 'iup_id', schema: { type: 'string' } },
@@ -327,7 +332,9 @@ const deleteCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'DE
 // ═══════════════════════════════════════════════════════════════
 //  IUP RKAB
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'GET', 'iup_management_crm');
+const searchCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'GET', 'iup_management_crm', [
+  { name: 'iup_id', schema: { type: 'string' } },
+]);
 const createCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'CREATE', 'iup_management_crm', [], [
   { name: 'iup_id', schema: { type: 'string' }, required: true },
   { name: 'year', schema: { type: 'number' }, required: true },
@@ -341,7 +348,9 @@ const deleteCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'DELETE');
 // ═══════════════════════════════════════════════════════════════
 //  IUP BRAND UNIT
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'GET', 'iup_management_crm');
+const searchCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'GET', 'iup_management_crm', [
+  { name: 'iup_id', schema: { type: 'string' } },
+]);
 const createCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'CREATE', 'iup_management_crm', [], [
   { name: 'iup_id', schema: { type: 'string' }, required: true },
   { name: 'brand_id', schema: { type: 'string' }, required: true },
@@ -355,7 +364,9 @@ const deleteCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'DEL
 //  IUP SURVEY
 //  Schema: iup_id, user_phone, user_name, chat_date, source_type, source_link, file_name, description
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'GET', 'iup_management_crm');
+const searchCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'GET', 'iup_management_crm', [
+  { name: 'iup_id', schema: { type: 'string' } },
+]);
 const getCRMIUPSurvey       = buildTool('iup_survey_by_id', 'iup_survey', 'GET_SINGLE', 'iup_management_crm', [], [], null, 'get_crm_iup_survey');
 const createCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'CREATE', 'iup_management_crm', [], [
   { name: 'iup_id', schema: { type: 'string' }, required: true },
