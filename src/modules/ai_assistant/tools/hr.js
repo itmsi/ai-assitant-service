@@ -97,9 +97,13 @@ const buildTool = (entity, endpoint, method, menuKey = 'HRM', searchExtra = [], 
 //  1. CANDIDATES (backward compatible: search_hr_candidates)
 // ═══════════════════════════════════════════════════════════════
 const searchHRCandidates = buildTool('candidates', 'candidates', 'GET', 'HRM', [
-  { name: 'month', schema: { type: 'string', description: 'Bulan YYYY-MM' } },
-  { name: 'status', schema: { type: 'string', description: 'Status kandidat' } },
-  { name: 'keyword', schema: { type: 'string', description: 'Keyword' } },
+  { name: 'candidate_status', schema: { type: 'string', description: 'Filter status kandidat' } },
+  { name: 'candidate_status_offering_letter', schema: { type: 'string', description: 'Status offering letter' } },
+  { name: 'assign_role', schema: { type: 'string', description: 'Role assignment' } },
+  { name: 'company_id', schema: { type: 'string' } },
+  { name: 'department_id', schema: { type: 'string' } },
+  { name: 'group_id', schema: { type: 'string' } },
+  { name: 'title_id', schema: { type: 'string' } },
 ], [], null, 'search_hr_candidates');
 const createHRCandidate   = buildTool('candidate', 'candidates', 'CREATE', 'HRM', [], [
   { name: 'candidate_name', schema: { type: 'string' }, required: true },
@@ -129,10 +133,14 @@ const createHRScheduleInterview  = buildTool('schedule_interview', 'schedule_int
   { name: 'schedule_interview_date', schema: { type: 'string', description: 'Tanggal interview' } },
   { name: 'schedule_interview_time', schema: { type: 'string', description: 'Waktu interview' } },
   { name: 'schedule_interview_duration', schema: { type: 'number', description: 'Durasi interview (menit)' } },
+  { name: 'assign_role', schema: { type: 'string', description: 'JSON object untuk role assignment' } },
 ]);
 const updateHRScheduleInterview  = buildTool('schedule_interview', 'schedule_interview', 'UPDATE', 'HRM', [], [
+  { name: 'candidate_id', schema: { type: 'string' } },
   { name: 'schedule_interview_date', schema: { type: 'string' } },
   { name: 'schedule_interview_time', schema: { type: 'string' } },
+  { name: 'schedule_interview_duration', schema: { type: 'number' } },
+  { name: 'assign_role', schema: { type: 'string' } },
 ]);
 const deleteHRScheduleInterview  = buildTool('schedule_interview', 'schedule_interview', 'DELETE', 'HRM');
 const getHRScheduleInterview     = buildTool('schedule_interview_by_id', 'schedule_interview', 'GET_SINGLE', 'HRM', [], [], null, 'get_hr_schedule_interview');
@@ -140,15 +148,22 @@ const getHRScheduleInterview     = buildTool('schedule_interview_by_id', 'schedu
 // ═══════════════════════════════════════════════════════════════
 //  3. INTERVIEWS
 // ═══════════════════════════════════════════════════════════════
-const searchHRInterviews = buildTool('interviews', 'interviews', 'GET', 'HRM');
+const searchHRInterviews = buildTool('interviews', 'interviews', 'GET', 'HRM', [
+  { name: 'schedule_interview_id', schema: { type: 'string' } },
+]);
 const createHRInterview  = buildTool('interview', 'interviews', 'CREATE', 'HRM', [], [
-  { name: 'schedule_interview_id', schema: { type: 'string' }, required: true },
+  { name: 'schedule_interview_id', schema: { type: 'string' } },
   { name: 'assigned_id', schema: { type: 'string' } },
   { name: 'comment', schema: { type: 'string' } },
+  { name: 'company_value', schema: { type: 'string' } },
+  { name: 'detail_interviews', schema: { type: 'array', items: { type: 'object' } } },
 ]);
 const updateHRInterview  = buildTool('interview', 'interviews', 'UPDATE', 'HRM', [], [
+  { name: 'schedule_interview_id', schema: { type: 'string' } },
   { name: 'assigned_id', schema: { type: 'string' } },
   { name: 'comment', schema: { type: 'string' } },
+  { name: 'company_value', schema: { type: 'string' } },
+  { name: 'detail_interviews', schema: { type: 'array', items: { type: 'object' } } },
 ]);
 const deleteHRInterview  = buildTool('interview', 'interviews', 'DELETE', 'HRM');
 const getHRInterview     = buildTool('interview_by_id', 'interviews', 'GET_SINGLE', 'HRM', [], [], null, 'get_hr_interview');
