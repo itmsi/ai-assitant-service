@@ -107,6 +107,12 @@ const searchNSPurchaseOrders = {
     { name: 'status', schema: { type: 'string', description: 'Filter status PO' } },
     { name: 'startDate', schema: { type: 'string', description: 'Tanggal mulai (YYYY-MM-DD)' } },
     { name: 'endDate', schema: { type: 'string', description: 'Tanggal akhir (YYYY-MM-DD)' } },
+    { name: 'approvalstatus', schema: { type: 'string' } },
+    { name: 'po_status', schema: { type: 'string' } },
+    { name: 'subsidiary', schema: { type: 'string' } },
+    { name: 'location', schema: { type: 'string' } },
+    { name: 'classes', schema: { type: 'string' } },
+    { name: 'created_by', schema: { type: 'string' } },
   ]),
   execute: async (params, authToken) => {
     try {
@@ -122,12 +128,33 @@ const searchNSPurchaseOrders = {
   },
 };
 const createNSPurchaseOrder = buildTool('ns_po', 'purchasing-orders', 'CREATE', 'Netsuite', [], [
-  { name: 'vendor_id', schema: { type: 'string' }, required: true },
-  { name: 'tran_date', schema: { type: 'string' } },
+  { name: 'vendorid', schema: { type: 'string' }, required: true },
+  { name: 'tran_date', schema: { type: 'string', description: 'Purchase date' }, required: true },
+  { name: 'trandate', schema: { type: 'string', description: 'Purchase date' } },
+  { name: 'subsidiary', schema: { type: 'string' }, required: true },
+  { name: 'customform', schema: { type: 'string' }, required: true },
+  { name: 'currency', schema: { type: 'string' }, required: true },
+  { name: 'location', schema: { type: 'string' }, required: true },
+  { name: 'items', schema: { type: 'array', items: { type: 'object' } }, required: true },
+  { name: 'memo', schema: { type: 'string' } },
+  { name: 'terms', schema: { type: 'string' } },
+  { name: 'class', schema: { type: 'string' } },
+  { name: 'custbody_me_pr_number', schema: { type: 'string' } },
+  { name: 'custbody_me_pr_type', schema: { type: 'string' } },
+  { name: 'custbody_me_pr_date', schema: { type: 'string' } },
 ]);
 const updateNSPurchaseOrder = buildTool('ns_po', 'purchasing-orders', 'UPDATE', 'Netsuite', [], [
-  { name: 'vendor_id', schema: { type: 'string' } },
-  { name: 'status', schema: { type: 'string' } },
+  { name: 'vendorid', schema: { type: 'string' } },
+  { name: 'subsidiary', schema: { type: 'string' }, required: true },
+  { name: 'customform', schema: { type: 'string' }, required: true },
+  { name: 'currency', schema: { type: 'string' }, required: true },
+  { name: 'location', schema: { type: 'string' }, required: true },
+  { name: 'items', schema: { type: 'array', items: { type: 'object' } }, required: true },
+  { name: 'purchasedate', schema: { type: 'string' }, required: true },
+  { name: 'memo', schema: { type: 'string' } },
+  { name: 'terms', schema: { type: 'string' } },
+  { name: 'class', schema: { type: 'string' } },
+  { name: 'department', schema: { type: 'string' } },
 ]);
 const getNSPurchaseOrderDetail = buildTool('ns_po_detail', 'purchasing-orders', 'GET_SINGLE', 'Netsuite');
 const syncNSPurchaseOrders = {
@@ -155,7 +182,12 @@ const searchNSSalesOrders = {
   name: 'search_ns_sales_orders',
   menuKey: 'Netsuite', action: 'read',
   description: 'Mencari data sales order Netsuite.',
-  parameters: buildSearchParams(),
+  parameters: buildSearchParams([
+    { name: 'customer_id', schema: { type: 'string' } },
+    { name: 'status_code', schema: { type: 'string' } },
+    { name: 'trans_date_start', schema: { type: 'string' } },
+    { name: 'trans_date_end', schema: { type: 'string' } },
+  ]),
   execute: async (params, authToken) => {
     try {
       const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
@@ -170,10 +202,32 @@ const searchNSSalesOrders = {
   },
 };
 const createNSSalesOrder = buildTool('ns_sales_order', 'sales-orders', 'CREATE', 'Netsuite', [], [
-  { name: 'customer_id', schema: { type: 'string' }, required: true },
+  { name: 'entity', schema: { type: 'string' }, required: true },
+  { name: 'items', schema: { type: 'array', items: { type: 'object' } }, required: true },
+  { name: 'subsidiary', schema: { type: 'string' }, required: true },
+  { name: 'trandate', schema: { type: 'string' }, required: true },
+  { name: 'customform', schema: { type: 'string' } },
+  { name: 'currency', schema: { type: 'string' } },
+  { name: 'location', schema: { type: 'string' } },
+  { name: 'department', schema: { type: 'string' } },
+  { name: 'class', schema: { type: 'string' } },
+  { name: 'memo', schema: { type: 'string' } },
+  { name: 'otherrefnum', schema: { type: 'string' } },
+  { name: 'custbody_msi_quotation_no_iec', schema: { type: 'string' } },
+  { name: 'custbody_cseg_cn_cfi', schema: { type: 'string' } },
 ]);
 const updateNSSalesOrder = buildTool('ns_sales_order', 'sales-orders', 'UPDATE', 'Netsuite', [], [
-  { name: 'customer_id', schema: { type: 'string' } },
+  { name: 'entity', schema: { type: 'string' } },
+  { name: 'items', schema: { type: 'array', items: { type: 'object' } } },
+  { name: 'subsidiary', schema: { type: 'string' } },
+  { name: 'trandate', schema: { type: 'string' } },
+  { name: 'customform', schema: { type: 'string' } },
+  { name: 'currency', schema: { type: 'string' } },
+  { name: 'location', schema: { type: 'string' } },
+  { name: 'department', schema: { type: 'string' } },
+  { name: 'class', schema: { type: 'string' } },
+  { name: 'memo', schema: { type: 'string' } },
+  { name: 'orderstatus', schema: { type: 'string' } },
 ]);
 const getNSSalesOrderDetail = buildTool('ns_sales_order_detail', 'sales-orders', 'GET_SINGLE', 'Netsuite');
 const syncNSSalesOrders = {
@@ -194,7 +248,9 @@ const syncNSSalesOrders = {
 // ═══════════════════════════════════════════════════════════════
 //  3. FAKTUR
 // ═══════════════════════════════════════════════════════════════
-const searchNSFaktur = buildTool('ns_faktur', 'faktur', 'GET', 'Netsuite');
+const searchNSFaktur = buildTool('ns_faktur', 'faktur', 'GET', 'Netsuite', [
+  { name: 'status', schema: { type: 'string' } },
+]);
 const createNSFaktur = buildTool('ns_faktur', 'faktur', 'CREATE', 'Netsuite', [], [
   { name: 'invoice_no', schema: { type: 'string' }, required: true },
   { name: 'customer_id', schema: { type: 'string' } },
@@ -208,7 +264,11 @@ const getNSFaktur = buildTool('ns_faktur_by_id', 'faktur', 'GET_SINGLE', 'Netsui
 // ═══════════════════════════════════════════════════════════════
 //  4. ITEMS
 // ═══════════════════════════════════════════════════════════════
-const searchNSItems = buildTool('ns_items', 'items', 'GET', 'Netsuite');
+const searchNSItems = buildTool('ns_items', 'items', 'GET', 'Netsuite', [
+  { name: 'item_type', schema: { type: 'string' } },
+  { name: 'item_type_id', schema: { type: 'string' } },
+  { name: 'netsuite_id', schema: { type: 'string' } },
+]);
 const syncNSItems = {
   name: 'sync_ns_items',
   menuKey: 'Netsuite', action: 'create',
@@ -227,7 +287,9 @@ const syncNSItems = {
 // ═══════════════════════════════════════════════════════════════
 //  5. VENDORS
 // ═══════════════════════════════════════════════════════════════
-const searchNSVendors = buildTool('ns_vendors', 'vendor', 'GET', 'Netsuite');
+const searchNSVendors = buildTool('ns_vendors', 'vendor', 'GET', 'Netsuite', [
+  { name: 'netsuite_id', schema: { type: 'string' } },
+]);
 const syncNSVendors = {
   name: 'sync_ns_vendors',
   menuKey: 'Netsuite', action: 'create',
@@ -246,16 +308,27 @@ const syncNSVendors = {
 // ═══════════════════════════════════════════════════════════════
 //  6. CUSTOMERS (Netsuite)
 // ═══════════════════════════════════════════════════════════════
-const searchNSCustomers = buildTool('ns_customers', 'customers', 'GET', 'Netsuite');
+const searchNSCustomers = buildTool('ns_customers', 'customers', 'GET', 'Netsuite', [
+  { name: 'is_sync', schema: { type: 'string' } },
+]);
 const createNSCustomer = buildTool('ns_customer', 'customers', 'CREATE', 'Netsuite', [], [
-  { name: 'company_name', schema: { type: 'string' }, required: true },
+  { name: 'companyName', schema: { type: 'string' }, required: true },
   { name: 'email', schema: { type: 'string' } },
+  { name: 'phone', schema: { type: 'string' } },
+  { name: 'subsidiary', schema: { type: 'string' } },
+  { name: 'address', schema: { type: 'string' } },
 ]);
 
 // ═══════════════════════════════════════════════════════════════
 //  7. INVOICE SALES ORDERS
 // ═══════════════════════════════════════════════════════════════
-const searchNSInvoiceSalesOrders = buildTool('ns_invoice_so', 'invoice-sales-orders', 'GET', 'Netsuite');
+const searchNSInvoiceSalesOrders = buildTool('ns_invoice_so', 'invoice-sales-orders', 'GET', 'Netsuite', [
+  { name: 'subsidiary', schema: { type: 'string' } },
+  { name: 'approvalstatus', schema: { type: 'string' } },
+  { name: 'status_faktur', schema: { type: 'string' } },
+  { name: 'trandate_start', schema: { type: 'string' } },
+  { name: 'trandate_end', schema: { type: 'string' } },
+]);
 const syncNSInvoiceSalesOrders = {
   name: 'sync_ns_invoice_so',
   menuKey: 'Netsuite', action: 'create',
@@ -276,47 +349,107 @@ const syncNSInvoiceSalesOrders = {
 // ═══════════════════════════════════════════════════════════════
 const searchNSSubsidiary = buildTool('ns_subsidiary', 'subsidiary', 'GET', 'Netsuite');
 const createNSSubsidiary = buildTool('ns_subsidiary', 'subsidiary', 'CREATE', 'Netsuite', [], [
-  { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'company_name', schema: { type: 'string' }, required: true },
+  { name: 'abbreviation', schema: { type: 'string' } },
+  { name: 'country_code', schema: { type: 'string' } },
+  { name: 'id_type', schema: { type: 'string' } },
+  { name: 'nitku', schema: { type: 'string' } },
+  { name: 'nomor', schema: { type: 'string' } },
 ]);
 const updateNSSubsidiary = buildTool('ns_subsidiary', 'subsidiary', 'UPDATE', 'Netsuite', [], [
-  { name: 'name', schema: { type: 'string' } },
+  { name: 'company_name', schema: { type: 'string' } },
+  { name: 'abbreviation', schema: { type: 'string' } },
+  { name: 'country_code', schema: { type: 'string' } },
+  { name: 'id_type', schema: { type: 'string' } },
+  { name: 'nitku', schema: { type: 'string' } },
+  { name: 'nomor', schema: { type: 'string' } },
 ]);
 const deleteNSSubsidiary = buildTool('ns_subsidiary', 'subsidiary', 'DELETE', 'Netsuite');
 
 // ═══════════════════════════════════════════════════════════════
 //  9. REFERENCE
 // ═══════════════════════════════════════════════════════════════
-const searchNSReference = buildTool('ns_reference', 'reference', 'GET', 'Netsuite');
+const searchNSReference = buildTool('ns_reference', 'reference', 'GET', 'Netsuite', [
+  { name: 'type', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'code_transaksi', schema: { type: 'string' } },
+]);
 const createNSReference = buildTool('ns_reference', 'reference', 'CREATE', 'Netsuite', [], [
-  { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'type', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' }, required: true },
+  { name: 'code_transaksi', schema: { type: 'string' } },
+  { name: 'description', schema: { type: 'string' } },
 ]);
 const updateNSReference = buildTool('ns_reference', 'reference', 'UPDATE', 'Netsuite', [], [
-  { name: 'name', schema: { type: 'string' } },
+  { name: 'type', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' }, required: true },
+  { name: 'code_transaksi', schema: { type: 'string' } },
+  { name: 'description', schema: { type: 'string' } },
 ]);
 const deleteNSReference = buildTool('ns_reference', 'reference', 'DELETE', 'Netsuite');
 
 // ═══════════════════════════════════════════════════════════════
 //  10. BILL PAYMENT
 // ═══════════════════════════════════════════════════════════════
-const searchNSBillPayment = buildTool('ns_bill_payment', 'bill-payment', 'GET', 'Netsuite');
+const searchNSBillPayment = buildTool('ns_bill_payment', 'bill-payment', 'GET', 'Netsuite', [
+  { name: 'subsidiary', schema: { type: 'string' } },
+  { name: 'approvalstatus', schema: { type: 'string' } },
+  { name: 'department', schema: { type: 'string' } },
+  { name: 'location', schema: { type: 'string' } },
+  { name: 'entity', schema: { type: 'string' } },
+  { name: 'trandate_from', schema: { type: 'string' } },
+  { name: 'trandate_to', schema: { type: 'string' } },
+]);
 const getNSBillPayment = buildTool('ns_bill_payment_detail', 'bill-payment', 'GET_SINGLE', 'Netsuite');
 
 // ═══════════════════════════════════════════════════════════════
 //  11. NS QUOTATION
 // ═══════════════════════════════════════════════════════════════
-const searchNSQuotation = buildTool('ns_quotation', 'quotation', 'GET', 'Netsuite');
+const searchNSQuotation = buildTool('ns_quotation', 'quotation', 'GET', 'Netsuite', [
+  { name: 'customer_id', schema: { type: 'string' } },
+  { name: 'subsidiary', schema: { type: 'string' } },
+  { name: 'approvalstatus', schema: { type: 'string' } },
+  { name: 'classes', schema: { type: 'string' } },
+  { name: 'is_deleted', schema: { type: 'string' } },
+  { name: 'tran_date_from', schema: { type: 'string' } },
+  { name: 'tran_date_to', schema: { type: 'string' } },
+]);
 const createNSQuotation = buildTool('ns_quotation', 'quotation', 'CREATE', 'Netsuite', [], [
-  { name: 'customer_id', schema: { type: 'string' }, required: true },
+  { name: 'entity', schema: { type: 'string' }, required: true },
+  { name: 'items', schema: { type: 'array', items: { type: 'object' } }, required: true },
+  { name: 'subsidiary', schema: { type: 'string' }, required: true },
+  { name: 'trandate', schema: { type: 'string' }, required: true },
+  { name: 'customform', schema: { type: 'string' }, required: true },
+  { name: 'currency', schema: { type: 'string' }, required: true },
+  { name: 'location', schema: { type: 'string' }, required: true },
+  { name: 'duedate', schema: { type: 'string' } },
+  { name: 'memo', schema: { type: 'string' } },
+  { name: 'department', schema: { type: 'string' } },
+  { name: 'class', schema: { type: 'string' } },
+  { name: 'opportunity', schema: { type: 'string' } },
+  { name: 'title', schema: { type: 'string' } },
+  { name: 'probability', schema: { type: 'number' } },
 ]);
 const updateNSQuotation = buildTool('ns_quotation', 'quotation', 'UPDATE', 'Netsuite', [], [
-  { name: 'customer_id', schema: { type: 'string' } },
+  { name: 'entity', schema: { type: 'string' } },
+  { name: 'items', schema: { type: 'array', items: { type: 'object' } } },
+  { name: 'subsidiary', schema: { type: 'string' } },
+  { name: 'trandate', schema: { type: 'string' } },
+  { name: 'customform', schema: { type: 'string' } },
+  { name: 'currency', schema: { type: 'string' } },
+  { name: 'location', schema: { type: 'string' } },
+  { name: 'memo', schema: { type: 'string' } },
+  { name: 'department', schema: { type: 'string' } },
 ]);
 const getNSQuotation = buildTool('ns_quotation_detail', 'quotation', 'GET_SINGLE', 'Netsuite');
 
 // ═══════════════════════════════════════════════════════════════
 //  12. LOCATIONS (Netsuite)
 // ═══════════════════════════════════════════════════════════════
-const searchNSLocations = buildTool('ns_locations', 'locations', 'GET', 'Netsuite');
+const searchNSLocations = buildTool('ns_locations', 'locations', 'GET', 'Netsuite', [
+  { name: 'subsidiary_id', schema: { type: 'string' } },
+  { name: 'is_parent', schema: { type: 'string' } },
+]);
 const syncNSLocations = {
   name: 'sync_ns_locations',
   menuKey: 'Netsuite', action: 'create',
@@ -335,7 +468,9 @@ const syncNSLocations = {
 // ═══════════════════════════════════════════════════════════════
 //  13. DEPARTMENTS (Netsuite)
 // ═══════════════════════════════════════════════════════════════
-const searchNSDepartments = buildTool('ns_departments', 'departments', 'GET', 'Netsuite');
+const searchNSDepartments = buildTool('ns_departments', 'departments', 'GET', 'Netsuite', [
+  { name: 'subsidiary_id', schema: { type: 'string' } },
+]);
 const syncNSDepartments = {
   name: 'sync_ns_departments',
   menuKey: 'Netsuite', action: 'create',
@@ -354,7 +489,10 @@ const syncNSDepartments = {
 // ═══════════════════════════════════════════════════════════════
 //  14. CLASSES
 // ═══════════════════════════════════════════════════════════════
-const searchNSClasses = buildTool('ns_classes', 'classes', 'GET', 'Netsuite');
+const searchNSClasses = buildTool('ns_classes', 'classes', 'GET', 'Netsuite', [
+  { name: 'subsidiary_id', schema: { type: 'string' } },
+  { name: 'class_profile', schema: { type: 'string' } },
+]);
 
 // ═══════════════════════════════════════════════════════════════
 //  15. TERMS
@@ -367,6 +505,7 @@ const searchNSTerms = buildTool('ns_terms', 'terms', 'GET', 'Netsuite');
 const searchNSPOStatus = buildTool('ns_po_status', 'po_status', 'GET', 'Netsuite');
 const createNSPOStatus = buildTool('ns_po_status', 'po_status', 'CREATE', 'Netsuite', [], [
   { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' }, required: true },
 ]);
 const deleteNSPOStatus = buildTool('ns_po_status', 'po_status', 'DELETE', 'Netsuite');
 
@@ -376,13 +515,17 @@ const deleteNSPOStatus = buildTool('ns_po_status', 'po_status', 'DELETE', 'Netsu
 const searchNSItemType = buildTool('ns_item_type', 'item_type', 'GET', 'Netsuite');
 const createNSItemType = buildTool('ns_item_type', 'item_type', 'CREATE', 'Netsuite', [], [
   { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' }, required: true },
+  { name: 'netsuite_id', schema: { type: 'string' } },
 ]);
 const deleteNSItemType = buildTool('ns_item_type', 'item_type', 'DELETE', 'Netsuite');
 
 // ═══════════════════════════════════════════════════════════════
 //  18. ATTACH FILE
 // ═══════════════════════════════════════════════════════════════
-const searchNSAttachFile = buildTool('ns_attach_file', 'attach_file', 'GET', 'Netsuite');
+const searchNSAttachFile = buildTool('ns_attach_file', 'attach_file', 'GET', 'Netsuite', [
+  { name: 'netsuite_id', schema: { type: 'string' } },
+]);
 
 // ═══════════════════════════════════════════════════════════════
 //  Exports

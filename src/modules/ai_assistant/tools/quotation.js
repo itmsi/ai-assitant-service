@@ -169,14 +169,16 @@ const searchQuotations = {
   description: 'Mencari data quotation. Response berisi pagination.total untuk jumlah keseluruhan.',
   parameters: buildSearchParams([
     { name: 'quotation_for', schema: { type: 'string' } },
-    { name: 'quotationNumber', schema: { type: 'string' } },
     { name: 'status', schema: { type: 'string' } },
-    { name: 'startDate', schema: { type: 'string' } },
-    { name: 'endDate', schema: { type: 'string' } },
+    { name: 'start_date', schema: { type: 'string', description: 'Filter tanggal mulai (YYYY-MM-DD)' } },
+    { name: 'end_date', schema: { type: 'string', description: 'Filter tanggal akhir (YYYY-MM-DD)' } },
+    { name: 'company_name', schema: { type: 'string' } },
+    { name: 'customer_id', schema: { type: 'string' } },
+    { name: 'island_id', schema: { type: 'string' } },
   ]),
-  execute: async ({ search, page = 1, limit = 10, sort_order = 'desc', quotation_for, quotationNumber, status, startDate, endDate }, authToken) => {
+  execute: async (params, authToken) => {
     try {
-      const payload = cleanObject({ page, limit, sort_order, search: search || quotationNumber || '', quotation_for: quotation_for || '', status, startDate, endDate });
+      const payload = cleanObject({ page: 1, limit: 10, sort_order: 'desc', ...params });
       const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
       const url = `${baseUrl}${sanitizePath(`${e4.path}/get`)}`;
       const response = await axios.post(url, payload || {}, { headers: getDefaultHeaders(authToken), timeout: aiConfig.API_GATEWAY_TIMEOUT });
@@ -188,12 +190,72 @@ const searchQuotations = {
   },
 };
 const createQuotation            = buildQuotationTool('manage_quotation', e4.path, 'CREATE', [], [
-  { name: 'customer_name', schema: { type: 'string' }, required: true },
   { name: 'quotation_for', schema: { type: 'string' } },
+  { name: 'customer_id', schema: { type: 'string' } },
+  { name: 'company', schema: { type: 'string' } },
+  { name: 'employee_id', schema: { type: 'string' } },
+  { name: 'island_id', schema: { type: 'string' } },
+  { name: 'project_id', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
+  { name: 'manage_quotation_date', schema: { type: 'string' } },
+  { name: 'manage_quotation_valid_date', schema: { type: 'string' } },
+  { name: 'manage_quotation_items', schema: { type: 'array', items: { type: 'object' } } },
+  { name: 'manage_quotation_delivery_fee', schema: { type: 'number' } },
+  { name: 'manage_quotation_ppn', schema: { type: 'number' } },
+  { name: 'manage_quotation_lead_time', schema: { type: 'string' } },
+  { name: 'manage_quotation_description', schema: { type: 'string' } },
+  { name: 'manage_quotation_shipping_term', schema: { type: 'string' } },
+  { name: 'manage_quotation_franco', schema: { type: 'string' } },
+  { name: 'manage_quotation_payment_nominal', schema: { type: 'number' } },
+  { name: 'manage_quotation_payment_presentase', schema: { type: 'number' } },
+  { name: 'manage_quotation_mutation_type', schema: { type: 'string' } },
+  { name: 'manage_quotation_mutation_nominal', schema: { type: 'number' } },
+  { name: 'manage_quotation_grand_total', schema: { type: 'number' } },
+  { name: 'manage_quotation_grand_total_before', schema: { type: 'number' } },
+  { name: 'manage_quotation_other', schema: { type: 'number' } },
+  { name: 'bank_account_id', schema: { type: 'string' } },
+  { name: 'bank_account_name', schema: { type: 'string' } },
+  { name: 'bank_account_number', schema: { type: 'string' } },
+  { name: 'bank_account_bank_name', schema: { type: 'string' } },
+  { name: 'term_content_id', schema: { type: 'string' } },
+  { name: 'term_content_directory', schema: { type: 'string' } },
+  { name: 'star', schema: { type: 'number' } },
+  { name: 'include_aftersales_page', schema: { type: 'boolean' } },
+  { name: 'include_msf_page', schema: { type: 'boolean' } },
 ]);
 const updateQuotation            = buildQuotationTool('manage_quotation', e4.path, 'UPDATE', [], [
-  { name: 'customer_name', schema: { type: 'string' } },
+  { name: 'quotation_for', schema: { type: 'string' } },
+  { name: 'customer_id', schema: { type: 'string' } },
+  { name: 'company', schema: { type: 'string' } },
+  { name: 'employee_id', schema: { type: 'string' } },
+  { name: 'island_id', schema: { type: 'string' } },
+  { name: 'project_id', schema: { type: 'string' } },
   { name: 'status', schema: { type: 'string' } },
+  { name: 'manage_quotation_date', schema: { type: 'string' } },
+  { name: 'manage_quotation_valid_date', schema: { type: 'string' } },
+  { name: 'manage_quotation_items', schema: { type: 'array', items: { type: 'object' } } },
+  { name: 'manage_quotation_delivery_fee', schema: { type: 'number' } },
+  { name: 'manage_quotation_ppn', schema: { type: 'number' } },
+  { name: 'manage_quotation_lead_time', schema: { type: 'string' } },
+  { name: 'manage_quotation_description', schema: { type: 'string' } },
+  { name: 'manage_quotation_shipping_term', schema: { type: 'string' } },
+  { name: 'manage_quotation_franco', schema: { type: 'string' } },
+  { name: 'manage_quotation_payment_nominal', schema: { type: 'number' } },
+  { name: 'manage_quotation_payment_presentase', schema: { type: 'number' } },
+  { name: 'manage_quotation_mutation_type', schema: { type: 'string' } },
+  { name: 'manage_quotation_mutation_nominal', schema: { type: 'number' } },
+  { name: 'manage_quotation_grand_total', schema: { type: 'number' } },
+  { name: 'manage_quotation_grand_total_before', schema: { type: 'number' } },
+  { name: 'manage_quotation_other', schema: { type: 'number' } },
+  { name: 'bank_account_id', schema: { type: 'string' } },
+  { name: 'bank_account_name', schema: { type: 'string' } },
+  { name: 'bank_account_number', schema: { type: 'string' } },
+  { name: 'bank_account_bank_name', schema: { type: 'string' } },
+  { name: 'term_content_id', schema: { type: 'string' } },
+  { name: 'term_content_directory', schema: { type: 'string' } },
+  { name: 'star', schema: { type: 'number' } },
+  { name: 'include_aftersales_page', schema: { type: 'boolean' } },
+  { name: 'include_msf_page', schema: { type: 'boolean' } },
 ]);
 const deleteQuotation            = buildQuotationTool('manage_quotation', e4.path, 'DELETE');
 
@@ -201,14 +263,18 @@ const deleteQuotation            = buildQuotationTool('manage_quotation', e4.pat
 //  5. TERM CONTENT
 // ═══════════════════════════════════════════════════════════════
 const e5 = ENTITIES.termContent;
-const searchQuotationTermCondition = buildQuotationTool('term_content', e5.path, 'GET');
+const searchQuotationTermCondition = buildQuotationTool('term_content', e5.path, 'GET', [
+  { name: 'company_name', schema: { type: 'string' } },
+]);
 const createQuotationTermCondition = buildQuotationTool('term_content', e5.path, 'CREATE', [], [
   { name: 'term_content_title', schema: { type: 'string' }, required: true },
-  { name: 'term_content_directory', schema: { type: 'string' } },
+  { name: 'term_content_directory', schema: { type: 'string' }, required: true },
+  { name: 'company_name', schema: { type: 'string' } },
 ]);
 const updateQuotationTermCondition = buildQuotationTool('term_content', e5.path, 'UPDATE', [], [
   { name: 'term_content_title', schema: { type: 'string' } },
   { name: 'term_content_directory', schema: { type: 'string' } },
+  { name: 'company_name', schema: { type: 'string' } },
 ]);
 const deleteQuotationTermCondition = buildQuotationTool('term_content', e5.path, 'DELETE');
 
@@ -216,7 +282,10 @@ const deleteQuotationTermCondition = buildQuotationTool('term_content', e5.path,
 //  6. COMPONENT PRODUCT
 // ═══════════════════════════════════════════════════════════════
 const e6 = ENTITIES.componentProduct;
-const searchQuotationProducts     = buildQuotationTool('componen_product', e6.path, 'GET');
+const searchQuotationProducts     = buildQuotationTool('componen_product', e6.path, 'GET', [
+  { name: 'company_name', schema: { type: 'string' } },
+  { name: 'product_type', schema: { type: 'string' } },
+]);
 const createQuotationProduct      = buildQuotationTool('componen_product', e6.path, 'CREATE', [], [
   { name: 'componen_product_name', schema: { type: 'string' }, required: true },
   { name: 'componen_product_description', schema: { type: 'string' } },
@@ -236,10 +305,21 @@ const createQuotationAccessory    = buildQuotationTool('accessory', e7.path, 'CR
   { name: 'accessory_part_name', schema: { type: 'string' }, required: true },
   { name: 'accessory_part_number', schema: { type: 'string' } },
   { name: 'accessory_specification', schema: { type: 'string' } },
+  { name: 'accessory_description', schema: { type: 'string' } },
+  { name: 'accessory_brand', schema: { type: 'string' } },
+  { name: 'accessory_region', schema: { type: 'string' } },
+  { name: 'accessory_remark', schema: { type: 'string' } },
+  { name: 'accessories_island_detail', schema: { type: 'array', items: { type: 'object' } } },
 ]);
 const updateQuotationAccessory    = buildQuotationTool('accessory', e7.path, 'UPDATE', [], [
   { name: 'accessory_part_name', schema: { type: 'string' } },
   { name: 'accessory_part_number', schema: { type: 'string' } },
+  { name: 'accessory_specification', schema: { type: 'string' } },
+  { name: 'accessory_description', schema: { type: 'string' } },
+  { name: 'accessory_brand', schema: { type: 'string' } },
+  { name: 'accessory_region', schema: { type: 'string' } },
+  { name: 'accessory_remark', schema: { type: 'string' } },
+  { name: 'accessories_island_detail', schema: { type: 'array', items: { type: 'object' } } },
 ]);
 const deleteQuotationAccessory    = buildQuotationTool('accessory', e7.path, 'DELETE');
 

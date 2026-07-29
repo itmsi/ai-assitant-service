@@ -99,35 +99,52 @@ const createEPCMasterCategory   = buildTool('master_category', 'master_category'
 ]);
 const updateEPCMasterCategory   = buildTool('master_category', 'master_category', 'UPDATE', 'EPC', [], [
   { name: 'master_category_name_en', schema: { type: 'string' } },
+  { name: 'master_category_name_cn', schema: { type: 'string' } },
+  { name: 'master_category_description', schema: { type: 'string' } },
 ]);
 const deleteEPCMasterCategory   = buildTool('master_category', 'master_category', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  2. CATEGORIES (CategoryInput: category_name_cn, category_description, categories_code, data_type)
 // ═══════════════════════════════════════════════════════════════
-const searchEPCCategories       = buildTool('categories', 'categories', 'GET');
+const searchEPCCategories       = buildTool('categories', 'categories', 'GET', 'EPC', [
+  { name: 'master_category_id', schema: { type: 'string' } },
+]);
 const createEPCCategory         = buildTool('category', 'categories', 'CREATE', 'EPC', [], [
   { name: 'category_name_cn', schema: { type: 'string' }, required: true },
   { name: 'category_description', schema: { type: 'string' } },
   { name: 'categories_code', schema: { type: 'string' } },
   { name: 'data_type', schema: { type: 'string' } },
+  { name: 'master_category_id', schema: { type: 'string' } },
+  { name: 'master_category_name_en', schema: { type: 'string' } },
 ]);
 const updateEPCCategory         = buildTool('category', 'categories', 'UPDATE', 'EPC', [], [
   { name: 'category_name_cn', schema: { type: 'string' } },
+  { name: 'category_description', schema: { type: 'string' } },
+  { name: 'categories_code', schema: { type: 'string' } },
+  { name: 'data_type', schema: { type: 'string' } },
+  { name: 'master_category_id', schema: { type: 'string' } },
+  { name: 'master_category_name_en', schema: { type: 'string' } },
 ]);
 const deleteEPCCategory         = buildTool('category', 'categories', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  3. TYPE CATEGORY (TypeCategoryInput: type_category_name_en, type_category_name_cn, type_category_description)
 // ═══════════════════════════════════════════════════════════════
-const searchEPCTypeCategory     = buildTool('type_category', 'type_category', 'GET');
+const searchEPCTypeCategory     = buildTool('type_category', 'type_category', 'GET', 'EPC', [
+  { name: 'category_id', schema: { type: 'string' } },
+]);
 const createEPCTypeCategory     = buildTool('type_category', 'type_category', 'CREATE', 'EPC', [], [
   { name: 'type_category_name_en', schema: { type: 'string' }, required: true },
   { name: 'type_category_name_cn', schema: { type: 'string' } },
   { name: 'type_category_description', schema: { type: 'string' } },
+  { name: 'category_id', schema: { type: 'string' } },
 ]);
 const updateEPCTypeCategory     = buildTool('type_category', 'type_category', 'UPDATE', 'EPC', [], [
   { name: 'type_category_name_en', schema: { type: 'string' } },
+  { name: 'type_category_name_cn', schema: { type: 'string' } },
+  { name: 'type_category_description', schema: { type: 'string' } },
+  { name: 'category_id', schema: { type: 'string' } },
 ]);
 const deleteEPCTypeCategory     = buildTool('type_category', 'type_category', 'DELETE');
 
@@ -148,7 +165,11 @@ const deleteEPCUnit             = buildTool('unit', 'unit', 'DELETE');
 // ═══════════════════════════════════════════════════════════════
 //  5. ITEM CATEGORY (ItemCategoryInput: item_category_name_en, type_category_id, item_category_name_cn, dokumen_name)
 // ═══════════════════════════════════════════════════════════════
-const searchEPCItemCategory     = buildTool('item_category', 'item_category', 'GET');
+const searchEPCItemCategory     = buildTool('item_category', 'item_category', 'GET', 'EPC', [
+  { name: 'dokumen_name', schema: { type: 'string' } },
+  { name: 'master_category_name_en', schema: { type: 'string' } },
+  { name: 'master_category_name_id', schema: { type: 'string' } },
+]);
 const createEPCItemCategory     = buildTool('item_category', 'item_category', 'CREATE', 'EPC', [], [
   { name: 'item_category_name_en', schema: { type: 'string' }, required: true },
   { name: 'item_category_name_cn', schema: { type: 'string' } },
@@ -168,11 +189,21 @@ const createEPCProduct          = buildTool('product', 'products', 'CREATE', 'EP
   { name: 'product_name_en', schema: { type: 'string' }, required: true },
   { name: 'product_name_cn', schema: { type: 'string' } },
   { name: 'product_description', schema: { type: 'string' } },
-  { name: 'category_id', schema: { type: 'string' } },
   { name: 'vin_number', schema: { type: 'string' } },
+  { name: 'model_type', schema: { type: 'string' } },
+  { name: 'model_engine', schema: { type: 'string' } },
+  { name: 'dimensi', schema: { type: 'string' } },
+  { name: 'data_details', schema: { type: 'array', items: { type: 'object' } } },
 ]);
 const updateEPCProduct          = buildTool('product', 'products', 'UPDATE', 'EPC', [], [
   { name: 'product_name_en', schema: { type: 'string' } },
+  { name: 'product_name_cn', schema: { type: 'string' } },
+  { name: 'product_description', schema: { type: 'string' } },
+  { name: 'vin_number', schema: { type: 'string' } },
+  { name: 'model_type', schema: { type: 'string' } },
+  { name: 'model_engine', schema: { type: 'string' } },
+  { name: 'dimensi', schema: { type: 'string' } },
+  { name: 'data_details', schema: { type: 'array', items: { type: 'object' } } },
 ]);
 const deleteEPCProduct          = buildTool('product', 'products', 'DELETE');
 
@@ -195,12 +226,21 @@ const deleteEPCDokumen          = buildTool('dokumen', 'dokumen', 'DELETE');
 const searchEPCMasterItems      = buildTool('master_items', 'master_items', 'GET');
 const createEPCMasterItem       = buildTool('master_item', 'master_items', 'CREATE', 'EPC', [], [
   { name: 'master_item_name_en', schema: { type: 'string' }, required: true },
+  { name: 'master_item_name_ch', schema: { type: 'string' } },
   { name: 'part_number', schema: { type: 'string' } },
   { name: 'description', schema: { type: 'string' } },
   { name: 'quantity', schema: { type: 'number' } },
+  { name: 'unit', schema: { type: 'string' } },
+  { name: 'target_id', schema: { type: 'string' } },
 ]);
 const updateEPCMasterItem       = buildTool('master_item', 'master_items', 'UPDATE', 'EPC', [], [
   { name: 'master_item_name_en', schema: { type: 'string' } },
+  { name: 'master_item_name_ch', schema: { type: 'string' } },
+  { name: 'part_number', schema: { type: 'string' } },
+  { name: 'description', schema: { type: 'string' } },
+  { name: 'quantity', schema: { type: 'number' } },
+  { name: 'unit', schema: { type: 'string' } },
+  { name: 'target_id', schema: { type: 'string' } },
 ]);
 const deleteEPCMasterItem       = buildTool('master_item', 'master_items', 'DELETE');
 
@@ -274,10 +314,20 @@ const createEPCVINCustomer = buildTool('vin_customer', 'vin_customer', 'CREATE',
 // ═══════════════════════════════════════════════════════════════
 const searchEPCTransactionOrder = buildTool('transaction_order', 'transaction_order', 'GET');
 const createEPCTransactionOrder = buildTool('transaction_order', 'transaction_order', 'CREATE', 'EPC', [], [
-  { name: 'order_number', schema: { type: 'string' }, required: true },
+  { name: 'customer_id', schema: { type: 'string' }, required: true },
+  { name: 'transaction_order_date', schema: { type: 'string' } },
+  { name: 'transaction_order_description', schema: { type: 'string' } },
+  { name: 'transaction_order_items', schema: { type: 'array', items: { type: 'object' } } },
+  { name: 'transaction_order_items_total', schema: { type: 'number' } },
+  { name: 'transaction_order_status', schema: { type: 'string' } },
 ]);
 const updateEPCTransactionOrder = buildTool('transaction_order', 'transaction_order', 'UPDATE', 'EPC', [], [
-  { name: 'order_number', schema: { type: 'string' } },
+  { name: 'customer_id', schema: { type: 'string' }, required: true },
+  { name: 'transaction_order_date', schema: { type: 'string' } },
+  { name: 'transaction_order_description', schema: { type: 'string' } },
+  { name: 'transaction_order_items', schema: { type: 'array', items: { type: 'object' } } },
+  { name: 'transaction_order_items_total', schema: { type: 'number' } },
+  { name: 'transaction_order_status', schema: { type: 'string' } },
 ]);
 const deleteEPCTransactionOrder = buildTool('transaction_order', 'transaction_order', 'DELETE');
 

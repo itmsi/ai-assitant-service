@@ -110,16 +110,28 @@ const buildTool = (entity, endpoint, method, menuKey = 'ROA ROE Calculate', sear
 // ═══════════════════════════════════════════════════════════════
 //  1. QUOTES (ROA/ROE Calculator)
 // ═══════════════════════════════════════════════════════════════
-const searchROEQuotes = buildTool('roe_quote', 'quotes', 'GET');
+const searchROEQuotes = buildTool('roe_quote', 'quotes', 'GET', 'ROA ROE Calculate', [
+  { name: 'commodity', schema: { type: 'string' } },
+  { name: 'is_admin', schema: { type: 'string' } },
+  { name: 'iup_customer_id', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
+]);
 const getROEQuote = buildTool('roe_quote_by_id', 'quotes', 'GET_SINGLE', 'ROA ROE Calculate', [], [], null, 'get_roe_quote');
 const createROEQuote = buildTool('roe_quote', 'quotes', 'CREATE', 'ROA ROE Calculate', [], [
-  { name: 'description', schema: { type: 'string' }, required: true },
-  { name: 'iup_customer_id', schema: { type: 'string' } },
-  { name: 'commodity', schema: { type: 'string' } },
+  { name: 'iup_customer_id', schema: { type: 'string' }, required: true },
+  { name: 'commodity', schema: { type: 'string' }, required: true },
+  { name: 'haul_distance', schema: { type: 'number' }, required: true },
+  { name: 'selling_price_per_ton', schema: { type: 'number' }, required: true },
+  { name: 'tonnage_per_ritase', schema: { type: 'number' }, required: true },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateROEQuote = buildTool('roe_quote', 'quotes', 'UPDATE', 'ROA ROE Calculate', [], [
-  { name: 'quote_name', schema: { type: 'string' } },
-  { name: 'description', schema: { type: 'string' } },
+  { name: 'iup_customer_id', schema: { type: 'string' }, required: true },
+  { name: 'commodity', schema: { type: 'string' }, required: true },
+  { name: 'haul_distance', schema: { type: 'number' }, required: true },
+  { name: 'selling_price_per_ton', schema: { type: 'number' }, required: true },
+  { name: 'tonnage_per_ritase', schema: { type: 'number' }, required: true },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteROEQuote = buildTool('roe_quote', 'quotes', 'DELETE');
 
@@ -156,7 +168,14 @@ const updateROEOperational = {
   parameters: {
     type: 'object', properties: {
       id: { type: 'string', description: 'ID quote' },
-      operational_cost: { type: 'number', description: 'Biaya operasional' },
+      downtime_percent: { type: 'number', description: 'Downtime (%)' },
+      fuel_consumption: { type: 'number', description: 'Konsumsi BBM' },
+      fuel_consumption_type: { type: 'string', description: 'Tipe konsumsi BBM' },
+      fuel_price: { type: 'number', description: 'Harga BBM (Rp/L)' },
+      hari_kerja_per_bulan: { type: 'number', description: 'Hari kerja per bulan' },
+      ritase_per_shift: { type: 'number', description: 'Ritase per shift' },
+      shift_per_hari: { type: 'number', description: 'Shift per hari' },
+      utilization_percent: { type: 'number', description: 'Utilization (%)' },
     }, required: ['id'],
   },
   execute: async ({ id, ...rest }, authToken) => {
@@ -183,7 +202,12 @@ const updateROECost = {
   parameters: {
     type: 'object', properties: {
       id: { type: 'string', description: 'ID quote' },
-      cost_price: { type: 'number', description: 'Harga pokok' },
+      depreciation_monthly: { type: 'number', description: 'Depreciation bulanan (Rp)' },
+      interest_monthly: { type: 'number', description: 'Interest bulanan (Rp)' },
+      overhead_monthly: { type: 'number', description: 'Overhead bulanan (Rp)' },
+      salary_operator_monthly: { type: 'number', description: 'Salary operator bulanan (Rp)' },
+      sparepart_expense_monthly: { type: 'number', description: 'Sparepart expense bulanan (Rp)' },
+      tyre_expense_monthly: { type: 'number', description: 'Tyre expense bulanan (Rp)' },
     }, required: ['id'],
   },
   execute: async ({ id, ...rest }, authToken) => {
@@ -210,7 +234,9 @@ const updateROEFinancial = {
   parameters: {
     type: 'object', properties: {
       id: { type: 'string', description: 'ID quote' },
-      revenue: { type: 'number', description: 'Pendapatan' },
+      assets: { type: 'number', description: 'Assets (Rp)' },
+      equity: { type: 'number', description: 'Equity (Rp)' },
+      liability: { type: 'number', description: 'Liability (Rp)' },
     }, required: ['id'],
   },
   execute: async ({ id, ...rest }, authToken) => {
@@ -230,16 +256,40 @@ const updateROEFinancial = {
 //  2. FINANCE (Net Income, Equity, ROA, ROE)
 // ═══════════════════════════════════════════════════════════════
 
+const calculateROAAndROE = {
+  name: 'calculate_roa_roe',
+  menuKey: 'ROA ROE Calculate', action: 'read',
+  description: 'Menghitung ROA dan ROE bersama-sama.',
+  parameters: {
+    type: 'object', properties: {
+      revenue: { type: 'number', description: 'Total pendapatan (Rp)' },
+      expense: { type: 'number', description: 'Total biaya (Rp)' },
+      assets: { type: 'number', description: 'Total aset (Rp)' },
+      liabilities: { type: 'number', description: 'Total kewajiban (Rp)' },
+    }, required: ['revenue', 'expense', 'assets', 'liabilities'],
+  },
+  execute: async (params, authToken) => {
+    try {
+      const baseUrl = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
+      const url = `${baseUrl}${sanitizePath('/api/roe/finance/roa-roe')}`;
+      const response = await axios.post(url, cleanObject(params), { headers: getDefaultHeaders(authToken), timeout: aiConfig.API_GATEWAY_TIMEOUT });
+      return { success: true, data: response.data, message: 'Perhitungan ROA & ROE berhasil' };
+    } catch (error) {
+      logger.error(`Error roa_roe: ${error.message}`);
+      return { success: false, data: null, message: error.response?.data?.message || 'Gagal hitung ROA & ROE' };
+    }
+  },
+};
+
 const calculateNetIncome = {
   name: 'calculate_net_income',
   menuKey: 'ROA ROE Calculate', action: 'read',
   description: 'Menghitung Laba Bersih (Net Income).',
   parameters: {
     type: 'object', properties: {
-      revenue: { type: 'number', description: 'Pendapatan' },
-      cost: { type: 'number', description: 'Biaya' },
-      tax: { type: 'number', description: 'Pajak' },
-    },
+      revenue: { type: 'number', description: 'Total pendapatan (Rp)' },
+      expense: { type: 'number', description: 'Total biaya (Rp)' },
+    }, required: ['revenue', 'expense'],
   },
   execute: async (params, authToken) => {
     try {
@@ -260,9 +310,9 @@ const calculateEquity = {
   description: 'Menghitung Ekuitas (Equity).',
   parameters: {
     type: 'object', properties: {
-      total_assets: { type: 'number', description: 'Total aset' },
-      total_liabilities: { type: 'number', description: 'Total kewajiban' },
-    },
+      assets: { type: 'number', description: 'Total aset (Rp)' },
+      liabilities: { type: 'number', description: 'Total kewajiban (Rp)' },
+    }, required: ['assets', 'liabilities'],
   },
   execute: async (params, authToken) => {
     try {
@@ -283,9 +333,9 @@ const calculateROA = {
   description: 'Menghitung ROA (Return on Assets).',
   parameters: {
     type: 'object', properties: {
-      net_income: { type: 'number', description: 'Laba bersih' },
-      total_assets: { type: 'number', description: 'Total aset' },
-    },
+      net_income: { type: 'number', description: 'Laba bersih (Rp)' },
+      assets: { type: 'number', description: 'Total aset (Rp)' },
+    }, required: ['net_income', 'assets'],
   },
   execute: async (params, authToken) => {
     try {
@@ -306,9 +356,11 @@ const calculateFinanceROE = {
   description: 'Menghitung ROE (Return on Equity).',
   parameters: {
     type: 'object', properties: {
-      net_income: { type: 'number', description: 'Laba bersih' },
-      equity: { type: 'number', description: 'Ekuitas' },
-    },
+      net_income: { type: 'number', description: 'Laba bersih (Rp)' },
+      equity: { type: 'number', description: 'Ekuitas (Rp) - Opsi A' },
+      assets: { type: 'number', description: 'Total aset (Rp) - Opsi B' },
+      liabilities: { type: 'number', description: 'Total kewajiban (Rp) - Opsi B' },
+    }, required: ['net_income'],
   },
   execute: async (params, authToken) => {
     try {
@@ -326,28 +378,46 @@ const calculateFinanceROE = {
 // ═══════════════════════════════════════════════════════════════
 //  3. UNIT PURCHASES
 // ═══════════════════════════════════════════════════════════════
-const searchROEUnitPurchases = buildTool('unit_purchase', 'unit-purchases', 'GET');
+const searchROEUnitPurchases = buildTool('unit_purchase', 'unit-purchases', 'GET', 'ROA ROE Calculate', [
+  { name: 'quote_id', schema: { type: 'string' } },
+  { name: 'iup_customer_id', schema: { type: 'string' } },
+  { name: 'is_admin', schema: { type: 'string' } },
+]);
 const getROEUnitPurchase = buildTool('unit_purchase_by_id', 'unit-purchases', 'GET_SINGLE', 'ROA ROE Calculate', [], [], null, 'get_unit_purchase');
 const createROEUnitPurchase = buildTool('unit_purchase', 'unit-purchases', 'CREATE', 'ROA ROE Calculate', [], [
   { name: 'quote_id', schema: { type: 'string' }, required: true },
-  { name: 'price_per_unit', schema: { type: 'number' } },
-  { name: 'quantity', schema: { type: 'number' } },
+  { name: 'price_per_unit', schema: { type: 'number' }, required: true },
+  { name: 'quantity', schema: { type: 'number' }, required: true },
+  { name: 'depreciation_period_months', schema: { type: 'number' }, required: true },
+  { name: 'down_payment_percent', schema: { type: 'number' }, required: true },
+  { name: 'financing_tenor_months', schema: { type: 'number' }, required: true },
+  { name: 'interest_rate_flat_per_year', schema: { type: 'number' }, required: true },
 ]);
 const updateROEUnitPurchase = buildTool('unit_purchase', 'unit-purchases', 'UPDATE', 'ROA ROE Calculate', [], [
-  { name: 'unit_name', schema: { type: 'string' } },
-  { name: 'price_per_unit', schema: { type: 'number' } },
-  { name: 'quantity', schema: { type: 'number' } },
+  { name: 'quote_id', schema: { type: 'string' }, required: true },
+  { name: 'price_per_unit', schema: { type: 'number' }, required: true },
+  { name: 'quantity', schema: { type: 'number' }, required: true },
+  { name: 'depreciation_period_months', schema: { type: 'number' }, required: true },
+  { name: 'down_payment_percent', schema: { type: 'number' }, required: true },
+  { name: 'financing_tenor_months', schema: { type: 'number' }, required: true },
+  { name: 'interest_rate_flat_per_year', schema: { type: 'number' }, required: true },
 ]);
 const deleteROEUnitPurchase = buildTool('unit_purchase', 'unit-purchases', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  4. LIST COMPARE
 // ═══════════════════════════════════════════════════════════════
-const searchROEListCompare = buildTool('list_compare', 'list_compare', 'GET');
+const searchROEListCompare = buildTool('list_compare', 'list_compare', 'GET', 'ROA ROE Calculate', [
+  { name: 'quote_id', schema: { type: 'string' }, required: true },
+]);
 const createROEListCompare = buildTool('list_compare', 'list_compare', 'CREATE', 'ROA ROE Calculate', [], [
   { name: 'quote_id', schema: { type: 'string' }, required: true },
-  { name: 'item_name', schema: { type: 'string' }, required: true },
+  { name: 'brand', schema: { type: 'string' }, required: true },
   { name: 'price_per_unit', schema: { type: 'number' } },
+  { name: 'qty', schema: { type: 'number' } },
+  { name: 'fuel_consumption', schema: { type: 'number' } },
+  { name: 'ritase', schema: { type: 'number' } },
+  { name: 'tonase', schema: { type: 'number' } },
 ]);
 const deleteROEListCompare = buildTool('list_compare_item', 'list_compare', 'DELETE');
 
@@ -357,12 +427,52 @@ const deleteROEListCompare = buildTool('list_compare_item', 'list_compare', 'DEL
 const searchROEHaulingPrice = buildTool('hauling_price', 'hauling_prices', 'GET');
 const getROEHaulingPrice = buildTool('hauling_price_by_id', 'hauling_prices', 'GET_SINGLE', 'ROA ROE Calculate', [], [], null, 'get_hauling_price');
 const createROEHaulingPrice = buildTool('hauling_price', 'hauling_prices', 'CREATE', 'ROA ROE Calculate', [], [
-  { name: 'name', schema: { type: 'string' }, required: true },
-  { name: 'price_per_ton', schema: { type: 'number' } },
+  { name: 'iup_customer_id', schema: { type: 'string' } },
+  { name: 'iup_id', schema: { type: 'string' } },
+  { name: 'iup_name', schema: { type: 'string' } },
+  { name: 'contractor_id', schema: { type: 'string' } },
+  { name: 'contractor_name', schema: { type: 'string' } },
+  { name: 'metode', schema: { type: 'string' } },
+  { name: 'periode_harga', schema: { type: 'string' } },
+  { name: 'effective_date', schema: { type: 'string' } },
+  { name: 'harga_solar_lama', schema: { type: 'number' } },
+  { name: 'harga_solar_baru', schema: { type: 'number' } },
+  { name: 'harga_hauling_lama', schema: { type: 'number' } },
+  { name: 'hasil_hitung', schema: { type: 'number' } },
+  { name: 'jarak_haul_km', schema: { type: 'number' } },
+  { name: 'tonase_per_unit', schema: { type: 'number' } },
+  { name: 'ritase_per_shift', schema: { type: 'number' } },
+  { name: 'shift_per_hari', schema: { type: 'number' } },
+  { name: 'fuel_consumption_l_km', schema: { type: 'number' } },
+  { name: 'porsi_biaya_bbm_persen', schema: { type: 'number' } },
+  { name: 'idle_factor_persen', schema: { type: 'number' } },
+  { name: 'adjustment_tambahan', schema: { type: 'number' } },
+  { name: 'catatan', schema: { type: 'string' } },
+  { name: 'notes_khusus', schema: { type: 'string' } },
 ]);
 const updateROEHaulingPrice = buildTool('hauling_price', 'hauling_prices', 'UPDATE', 'ROA ROE Calculate', [], [
-  { name: 'name', schema: { type: 'string' } },
-  { name: 'price_per_ton', schema: { type: 'number' } },
+  { name: 'iup_customer_id', schema: { type: 'string' } },
+  { name: 'iup_id', schema: { type: 'string' } },
+  { name: 'iup_name', schema: { type: 'string' } },
+  { name: 'contractor_id', schema: { type: 'string' } },
+  { name: 'contractor_name', schema: { type: 'string' } },
+  { name: 'metode', schema: { type: 'string' } },
+  { name: 'periode_harga', schema: { type: 'string' } },
+  { name: 'effective_date', schema: { type: 'string' } },
+  { name: 'harga_solar_lama', schema: { type: 'number' } },
+  { name: 'harga_solar_baru', schema: { type: 'number' } },
+  { name: 'harga_hauling_lama', schema: { type: 'number' } },
+  { name: 'hasil_hitung', schema: { type: 'number' } },
+  { name: 'jarak_haul_km', schema: { type: 'number' } },
+  { name: 'tonase_per_unit', schema: { type: 'number' } },
+  { name: 'ritase_per_shift', schema: { type: 'number' } },
+  { name: 'shift_per_hari', schema: { type: 'number' } },
+  { name: 'fuel_consumption_l_km', schema: { type: 'number' } },
+  { name: 'porsi_biaya_bbm_persen', schema: { type: 'number' } },
+  { name: 'idle_factor_persen', schema: { type: 'number' } },
+  { name: 'adjustment_tambahan', schema: { type: 'number' } },
+  { name: 'catatan', schema: { type: 'string' } },
+  { name: 'notes_khusus', schema: { type: 'string' } },
 ]);
 const deleteROEHaulingPrice = buildTool('hauling_price', 'hauling_prices', 'DELETE');
 
@@ -374,6 +484,7 @@ module.exports = {
   // Quotes
   searchROEQuotes, getROEQuote, createROEQuote, updateROEQuote, deleteROEQuote,
   calculateROE, updateROEOperational, updateROECost, updateROEFinancial,
+  calculateROAAndROE,
   // Finance
   calculateNetIncome, calculateEquity, calculateROA, calculateFinanceROE,
   // Unit Purchases

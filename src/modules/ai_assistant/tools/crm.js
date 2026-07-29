@@ -91,6 +91,8 @@ const buildTool = (entity, endpoint, method, menuKey = 'iup_management_crm', sea
 //  Swagger TerritoryInput: type*, name*, island_id, group_id, area_id, iup_zone_id, segment_description, code, status
 // ═══════════════════════════════════════════════════════════════
 const searchCRMTerritory = buildTool('territory', 'territory', 'GET', 'iup_management_crm', [
+  { name: 'status', schema: { type: 'string' } },
+  { name: 'sort_by', schema: { type: 'string' } },
   { name: 'is_admin', schema: { type: 'string' } },
 ]);
 const createCRMTerritory = buildTool('territory', 'territory', 'CREATE', 'iup_management_crm', [], [
@@ -100,12 +102,20 @@ const createCRMTerritory = buildTool('territory', 'territory', 'CREATE', 'iup_ma
   { name: 'group_id', schema: { type: 'string' } },
   { name: 'area_id', schema: { type: 'string' } },
   { name: 'iup_zone_id', schema: { type: 'string' } },
+  { name: 'segment_description', schema: { type: 'string' } },
   { name: 'code', schema: { type: 'string' } },
   { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMTerritory = buildTool('territory', 'territory', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'name', schema: { type: 'string' } },
   { name: 'type', schema: { type: 'string' } },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'island_id', schema: { type: 'string' } },
+  { name: 'group_id', schema: { type: 'string' } },
+  { name: 'area_id', schema: { type: 'string' } },
+  { name: 'iup_zone_id', schema: { type: 'string' } },
+  { name: 'segment_description', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMTerritory = buildTool('territory', 'territory', 'DELETE');
 
@@ -115,9 +125,16 @@ const deleteCRMTerritory = buildTool('territory', 'territory', 'DELETE');
 // ═══════════════════════════════════════════════════════════════
 const searchCRMIUPManagement = buildTool('iup_management', 'iup_management', 'GET', 'iup_management_crm', [
   { name: 'status', schema: { type: 'string' } },
+  { name: 'sort_by', schema: { type: 'string' } },
   { name: 'is_admin', schema: { type: 'string' } },
   { name: 'employee_id', schema: { type: 'string' } },
   { name: 'segmentation_id', schema: { type: 'string' } },
+  { name: 'island_id', schema: { type: 'string' } },
+  { name: 'group_id', schema: { type: 'string' } },
+  { name: 'area_id', schema: { type: 'string' } },
+  { name: 'iup_zone_id', schema: { type: 'string' } },
+  { name: 'iup_segment_id', schema: { type: 'string' } },
+  { name: 'is_contractor_count', schema: { type: 'string' } },
 ]);
 const createCRMIUPManagement = buildTool('iup_management', 'iup_management', 'CREATE', 'iup_management_crm', [], [
   { name: 'company_name', schema: { type: 'string' }, required: true },
@@ -125,9 +142,42 @@ const createCRMIUPManagement = buildTool('iup_management', 'iup_management', 'CR
   { name: 'business_type', schema: { type: 'string' } },
   { name: 'permit_type', schema: { type: 'string' } },
   { name: 'segmentation_id', schema: { type: 'string' } },
+  { name: 'iup_segment_id', schema: { type: 'string' } },
+  { name: 'province_name', schema: { type: 'string' } },
+  { name: 'pic', schema: { type: 'string' } },
+  { name: 'mine_location', schema: { type: 'string' } },
+  { name: 'area_size_ha', schema: { type: 'number' } },
+  { name: 'regency_name', schema: { type: 'string' } },
+  { name: 'sk_number', schema: { type: 'string' } },
+  { name: 'authorized_officer', schema: { type: 'string' } },
+  { name: 'activity_stage', schema: { type: 'string' } },
+  { name: 'sk_end_date', schema: { type: 'string' } },
+  { name: 'sk_effective_date', schema: { type: 'string' } },
+  { name: 'company_full_name', schema: { type: 'string' } },
+  { name: 'rkab', schema: { type: 'string' } },
+  { name: 'iup_code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMIUPManagement = buildTool('iup_management', 'iup_management', 'UPDATE', 'iup_management_crm', [], [
   { name: 'company_name', schema: { type: 'string' } },
+  { name: 'iup_zone_id', schema: { type: 'string' } },
+  { name: 'business_type', schema: { type: 'string' } },
+  { name: 'permit_type', schema: { type: 'string' } },
+  { name: 'segmentation_id', schema: { type: 'string' } },
+  { name: 'iup_segment_id', schema: { type: 'string' } },
+  { name: 'province_name', schema: { type: 'string' } },
+  { name: 'pic', schema: { type: 'string' } },
+  { name: 'mine_location', schema: { type: 'string' } },
+  { name: 'area_size_ha', schema: { type: 'number' } },
+  { name: 'regency_name', schema: { type: 'string' } },
+  { name: 'sk_number', schema: { type: 'string' } },
+  { name: 'authorized_officer', schema: { type: 'string' } },
+  { name: 'activity_stage', schema: { type: 'string' } },
+  { name: 'sk_end_date', schema: { type: 'string' } },
+  { name: 'sk_effective_date', schema: { type: 'string' } },
+  { name: 'company_full_name', schema: { type: 'string' } },
+  { name: 'rkab', schema: { type: 'string' } },
+  { name: 'iup_code', schema: { type: 'string' } },
   { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMIUPManagement = buildTool('iup_management', 'iup_management', 'DELETE');
@@ -135,15 +185,12 @@ const deleteCRMIUPManagement = buildTool('iup_management', 'iup_management', 'DE
 // ═══════════════════════════════════════════════════════════════
 //  SEGMENTATION
 // ═══════════════════════════════════════════════════════════════
-const searchCRMSegmentation = buildTool('segmentation', 'segmentation', 'GET', 'iup_management_crm', [
-  { name: 'is_admin', schema: { type: 'string' } },
-]);
+const searchCRMSegmentation = buildTool('segmentation', 'segmentation', 'GET', 'iup_management_crm');
 const createCRMSegmentation = buildTool('segmentation', 'segmentation', 'CREATE', 'iup_management_crm', [], [
-  { name: 'segmentation_name', schema: { type: 'string' }, required: true },
-  { name: 'description', schema: { type: 'string' } },
+  { name: 'segmentation_name_en', schema: { type: 'string' }, required: true },
 ]);
 const updateCRMSegmentation = buildTool('segmentation', 'segmentation', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'segmentation_name', schema: { type: 'string' } },
+  { name: 'segmentation_name_en', schema: { type: 'string' } },
 ]);
 const deleteCRMSegmentation = buildTool('segmentation', 'segmentation', 'DELETE');
 
@@ -156,6 +203,11 @@ const searchCRMIUPCustomers = buildTool('iup_customers', 'iup_customers', 'GET',
   { name: 'mine_type', schema: { type: 'string' } },
   { name: 'status', schema: { type: 'string' } },
   { name: 'is_admin', schema: { type: 'string' } },
+  { name: 'customer_id', schema: { type: 'string' } },
+  { name: 'customer_name', schema: { type: 'string' } },
+  { name: 'iup_name', schema: { type: 'string' } },
+  { name: 'segmentation_id', schema: { type: 'string' } },
+  { name: 'type', schema: { type: 'string' } },
 ]);
 const createCRMIUPCustomer = buildTool('iup_customer', 'iup_customers', 'CREATE', 'iup_management_crm', [], [
   { name: 'customer_name', schema: { type: 'string' }, required: true },
@@ -172,16 +224,33 @@ const deleteCRMIUPCustomer = buildTool('iup_customer', 'iup_customers', 'DELETE'
 // ═══════════════════════════════════════════════════════════════
 //  TRANSACTIONS
 // ═══════════════════════════════════════════════════════════════
-const searchCRMTransactions = buildTool('transactions', 'transactions', 'GET');
+const searchCRMTransactions = buildTool('transactions', 'transactions', 'GET', 'iup_management_crm', [
+  { name: 'is_admin', schema: { type: 'string' } },
+  { name: 'start_date', schema: { type: 'string' } },
+  { name: 'end_date', schema: { type: 'string' } },
+  { name: 'transaction_type', schema: { type: 'string' } },
+]);
 const createCRMTransaction = buildTool('transaction', 'transactions', 'CREATE', 'iup_management_crm', [], [
   { name: 'iup_customer_id', schema: { type: 'string' }, required: true },
-  { name: 'transaction_type', schema: { type: 'string' } },
-  { name: 'amount', schema: { type: 'number' } },
-  { name: 'description', schema: { type: 'string' } },
+  { name: 'transaction_date', schema: { type: 'string' } },
+  { name: 'transaction_time', schema: { type: 'string' } },
+  { name: 'transaction_source', schema: { type: 'string' } },
+  { name: 'summary_point', schema: { type: 'string' } },
+  { name: 'summary_bim', schema: { type: 'string' } },
+  { name: 'pain_point', schema: { type: 'string' } },
+  { name: 'solution_point', schema: { type: 'string' } },
+  { name: 'segmentation_id', schema: { type: 'string' } },
+  { name: 'segmentation_properties', schema: { type: 'string' } },
+  { name: 'image_url', schema: { type: 'string' } },
+  { name: 'latitude', schema: { type: 'string' } },
+  { name: 'longitude', schema: { type: 'string' } },
 ]);
 const updateCRMTransaction = buildTool('transaction', 'transactions', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'amount', schema: { type: 'number' } },
-  { name: 'description', schema: { type: 'string' } },
+  { name: 'iup_customer_id', schema: { type: 'string' } },
+  { name: 'summary_point', schema: { type: 'string' } },
+  { name: 'pain_point', schema: { type: 'string' } },
+  { name: 'solution_point', schema: { type: 'string' } },
+  { name: 'image_url', schema: { type: 'string' } },
 ]);
 const deleteCRMTransaction = buildTool('transaction', 'transactions', 'DELETE');
 
@@ -204,11 +273,14 @@ const deleteCRMEmployeeDataAccess = buildTool('employee_data_access', 'employee-
 // ═══════════════════════════════════════════════════════════════
 const searchCRMIsland = buildTool('crm_island', 'island', 'GET', 'iup_management_crm');
 const createCRMIsland = buildTool('crm_island', 'island', 'CREATE', 'iup_management_crm', [], [
-  { name: 'island_name', schema: { type: 'string' }, required: true },
+  { name: 'name', schema: { type: 'string' }, required: true },
   { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMIsland = buildTool('crm_island', 'island', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'island_name', schema: { type: 'string' } },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMIsland = buildTool('crm_island', 'island', 'DELETE');
 
@@ -228,58 +300,90 @@ const deleteCRMBrand = buildTool('brand', 'brand', 'DELETE');
 // ═══════════════════════════════════════════════════════════════
 //  GROUP (CRM)
 // ═══════════════════════════════════════════════════════════════
-const searchCRMGroup = buildTool('crm_group', 'group', 'GET', 'iup_management_crm');
+const searchCRMGroup = buildTool('crm_group', 'group', 'GET', 'iup_management_crm', [
+  { name: 'island_id', schema: { type: 'string' } },
+]);
 const createCRMGroup = buildTool('crm_group', 'group', 'CREATE', 'iup_management_crm', [], [
-  { name: 'group_name', schema: { type: 'string' }, required: true },
+  { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'island_id', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMGroup = buildTool('crm_group', 'group', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'group_name', schema: { type: 'string' } },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'island_id', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMGroup = buildTool('crm_group', 'group', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  AREA
 // ═══════════════════════════════════════════════════════════════
-const searchCRMArea = buildTool('area', 'area', 'GET', 'iup_management_crm');
+const searchCRMArea = buildTool('area', 'area', 'GET', 'iup_management_crm', [
+  { name: 'group_id', schema: { type: 'string' } },
+]);
 const createCRMArea = buildTool('area', 'area', 'CREATE', 'iup_management_crm', [], [
-  { name: 'area_name', schema: { type: 'string' }, required: true },
+  { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'group_id', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMArea = buildTool('area', 'area', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'area_name', schema: { type: 'string' } },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'group_id', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMArea = buildTool('area', 'area', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  IUP ZONE
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPZone = buildTool('iup_zone', 'iup_zone', 'GET', 'iup_management_crm');
+const searchCRMIUPZone = buildTool('iup_zone', 'iup_zone', 'GET', 'iup_management_crm', [
+  { name: 'area_id', schema: { type: 'string' } },
+]);
 const createCRMIUPZone = buildTool('iup_zone', 'iup_zone', 'CREATE', 'iup_management_crm', [], [
-  { name: 'iup_zone_name', schema: { type: 'string' }, required: true },
+  { name: 'name', schema: { type: 'string' }, required: true },
+  { name: 'area_id', schema: { type: 'string' }, required: true },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMIUPZone = buildTool('iup_zone', 'iup_zone', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'iup_zone_name', schema: { type: 'string' } },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'area_id', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMIUPZone = buildTool('iup_zone', 'iup_zone', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  IUP SEGMENTATIONS
 // ═══════════════════════════════════════════════════════════════
-const searchCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'GET', 'iup_management_crm', [
-  { name: 'iup_id', schema: { type: 'string' } },
-]);
+const searchCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'GET', 'iup_management_crm');
 const createCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'CREATE', 'iup_management_crm', [], [
-  { name: 'iup_id', schema: { type: 'string' }, required: true },
-  { name: 'segmentation_id', schema: { type: 'string' }, required: true },
+  { name: 'iup_zone_id', schema: { type: 'string' }, required: true },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'segment_description', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'iup_id', schema: { type: 'string' } },
+  { name: 'name', schema: { type: 'string' } },
+  { name: 'code', schema: { type: 'string' } },
+  { name: 'segment_description', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMIUPSegmentation = buildTool('iup_segmentation', 'iup_segmentations', 'DELETE');
 
 // ═══════════════════════════════════════════════════════════════
 //  PROJECTS
 // ═══════════════════════════════════════════════════════════════
-const searchCRMProject = buildTool('crm_project', 'projects', 'GET', 'iup_management_crm');
+const searchCRMProject = buildTool('crm_project', 'projects', 'GET', 'iup_management_crm', [
+  { name: 'employee_id', schema: { type: 'string' } },
+  { name: 'iup_customer_id', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
+]);
 const createCRMProject = buildTool('crm_project', 'projects', 'CREATE', 'iup_management_crm', [], [
   { name: 'project_name', schema: { type: 'string' }, required: true },
 ]);
@@ -304,13 +408,21 @@ const deleteCRMWorkOrder = buildTool('work_order', 'work_order', 'DELETE');
 // ═══════════════════════════════════════════════════════════════
 //  DAILY TASK ACTIVITY
 // ═══════════════════════════════════════════════════════════════
-const searchCRMDailyTask = buildTool('daily_task_activity', 'daily_task_activity', 'GET', 'iup_management_crm');
+const searchCRMDailyTask = buildTool('daily_task_activity', 'daily_task_activity', 'GET', 'iup_management_crm', [
+  { name: 'status', schema: { type: 'string' } },
+  { name: 'priority', schema: { type: 'string' } },
+]);
 const createCRMDailyTask = buildTool('daily_task_activity', 'daily_task_activity', 'CREATE', 'iup_management_crm', [], [
-  { name: 'activity_name', schema: { type: 'string' }, required: true },
-  { name: 'activity_date', schema: { type: 'string' } },
+  { name: 'daily_task', schema: { type: 'string' } },
+  { name: 'daily_task_activity_description', schema: { type: 'string' } },
+  { name: 'priority', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const updateCRMDailyTask = buildTool('daily_task_activity', 'daily_task_activity', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'activity_name', schema: { type: 'string' } },
+  { name: 'daily_task', schema: { type: 'string' } },
+  { name: 'daily_task_activity_description', schema: { type: 'string' } },
+  { name: 'priority', schema: { type: 'string' } },
+  { name: 'status', schema: { type: 'string' } },
 ]);
 const deleteCRMDailyTask = buildTool('daily_task_activity', 'daily_task_activity', 'DELETE');
 
@@ -321,11 +433,12 @@ const searchCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'GE
   { name: 'iup_id', schema: { type: 'string' } },
 ]);
 const createCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'CREATE', 'iup_management_crm', [], [
-  { name: 'contractor_name', schema: { type: 'string' }, required: true },
+  { name: 'iup_contractor_name', schema: { type: 'string' }, required: true },
   { name: 'iup_id', schema: { type: 'string' } },
 ]);
 const updateCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'contractor_name', schema: { type: 'string' } },
+  { name: 'iup_contractor_name', schema: { type: 'string' } },
+  { name: 'iup_id', schema: { type: 'string' } },
 ]);
 const deleteCRMIUPContractor = buildTool('iup_contractor', 'iup_contractor', 'DELETE');
 
@@ -337,11 +450,14 @@ const searchCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'GET', 'iup_managemen
 ]);
 const createCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'CREATE', 'iup_management_crm', [], [
   { name: 'iup_id', schema: { type: 'string' }, required: true },
-  { name: 'year', schema: { type: 'number' }, required: true },
-  { name: 'volume', schema: { type: 'number' } },
+  { name: 'iup_rkab_year', schema: { type: 'number' } },
+  { name: 'iup_rkab_current_production', schema: { type: 'number' } },
+  { name: 'iup_rkab_target_production', schema: { type: 'number' } },
 ]);
 const updateCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'UPDATE', 'iup_management_crm', [], [
-  { name: 'volume', schema: { type: 'number' } },
+  { name: 'iup_rkab_year', schema: { type: 'number' } },
+  { name: 'iup_rkab_current_production', schema: { type: 'number' } },
+  { name: 'iup_rkab_target_production', schema: { type: 'number' } },
 ]);
 const deleteCRMIUPRkab = buildTool('iup_rkab', 'iup_rkab', 'DELETE');
 
@@ -352,11 +468,14 @@ const searchCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'GET
   { name: 'iup_id', schema: { type: 'string' } },
 ]);
 const createCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'CREATE', 'iup_management_crm', [], [
-  { name: 'iup_id', schema: { type: 'string' }, required: true },
-  { name: 'brand_id', schema: { type: 'string' }, required: true },
+  { name: 'iup_id', schema: { type: 'string' } },
+  { name: 'iup_brand_unit_name', schema: { type: 'string' } },
+  { name: 'iup_brand_unit_qty', schema: { type: 'number' } },
 ]);
 const updateCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'UPDATE', 'iup_management_crm', [], [
   { name: 'iup_id', schema: { type: 'string' } },
+  { name: 'iup_brand_unit_name', schema: { type: 'string' } },
+  { name: 'iup_brand_unit_qty', schema: { type: 'number' } },
 ]);
 const deleteCRMIUPBrandUnit = buildTool('iup_brand_unit', 'iup_brand_unit', 'DELETE');
 
@@ -369,8 +488,8 @@ const searchCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'GET', 'iup_
 ]);
 const getCRMIUPSurvey       = buildTool('iup_survey_by_id', 'iup_survey', 'GET_SINGLE', 'iup_management_crm', [], [], null, 'get_crm_iup_survey');
 const createCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'CREATE', 'iup_management_crm', [], [
-  { name: 'iup_id', schema: { type: 'string' }, required: true },
-  { name: 'user_name', schema: { type: 'string' }, required: true },
+  { name: 'iup_id', schema: { type: 'string' } },
+  { name: 'user_name', schema: { type: 'string' } },
   { name: 'user_phone', schema: { type: 'string' } },
   { name: 'chat_date', schema: { type: 'string' } },
   { name: 'source_type', schema: { type: 'string' } },
@@ -380,6 +499,11 @@ const createCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'CREATE', 'i
 ]);
 const updateCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'UPDATE', 'iup_management_crm', [], [
   { name: 'user_name', schema: { type: 'string' } },
+  { name: 'user_phone', schema: { type: 'string' } },
+  { name: 'chat_date', schema: { type: 'string' } },
+  { name: 'source_type', schema: { type: 'string' } },
+  { name: 'source_link', schema: { type: 'string' } },
+  { name: 'file_name', schema: { type: 'string' } },
   { name: 'description', schema: { type: 'string' } },
 ]);
 const deleteCRMIUPSurvey    = buildTool('iup_survey', 'iup_survey', 'DELETE');
