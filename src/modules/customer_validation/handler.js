@@ -13,8 +13,14 @@ const validateDuplicate = async (req, res) => {
       return errorResponse(res, 'customer_name wajib diisi dan harus berupa array yang tidak kosong', 400);
     }
 
+    // Validasi Header Authorization
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return errorResponse(res, 'Authorization (Bearer token) wajib disertakan pada header', 401);
+    }
+
     // Call service to validate duplicates
-    const result = await validateDuplicateCustomers(customer_name);
+    const result = await validateDuplicateCustomers(customer_name, authHeader);
 
     return successResponse(res, {
       hasDuplicates: result.hasDuplicates,
@@ -32,7 +38,7 @@ const validateDuplicate = async (req, res) => {
     // Handle specific error types dengan status code yang sesuai
     if (error.name === 'DatabaseConnectionError') {
       return errorResponse(
-        res, 
+        res,
         error.message || 'Database connection error',
         503,
         {
@@ -44,7 +50,7 @@ const validateDuplicate = async (req, res) => {
 
     // Handle AI configuration errors
     if (error.message && (
-      error.message.includes('AI service') || 
+      error.message.includes('AI service') ||
       error.message.includes('menginisialisasi AI') ||
       error.message.includes('memanggil AI service') ||
       error.message.includes('API key')
@@ -59,7 +65,7 @@ const validateDuplicate = async (req, res) => {
 
     // Generic error handling
     const errorMessage = error.message || error.toString() || 'Internal server error';
-    return errorResponse(res, errorMessage, 500, { 
+    return errorResponse(res, errorMessage, 500, {
       name: error.name,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });

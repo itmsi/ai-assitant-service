@@ -61,15 +61,27 @@ const saveConversation = async (sessionId, userId, messages) => {
 };
 
 /**
- * Get conversation history by session ID
+ * Get conversation history by session ID (with ownership check)
  * @param {string} sessionId - Session ID
+ * @param {string} userId - User ID for ownership verification
  * @returns {Promise<Array|null>}
  */
-const getConversation = async (sessionId) => {
+const getConversation = async (sessionId, userId) => {
   try {
-    const conversation = await db('ai_conversations')
-      .where({ session_id: sessionId })
-      .first();
+    // Try with ownership check first
+    let conversation = null;
+    if (userId && userId !== 'anonymous') {
+      conversation = await db('ai_conversations')
+        .where({ session_id: sessionId, user_id: userId })
+        .first();
+    }
+
+    // Fallback to sessionId-only lookup
+    if (!conversation) {
+      conversation = await db('ai_conversations')
+        .where({ session_id: sessionId })
+        .first();
+    }
 
     if (!conversation) {
       logger.debug(`Conversation not found in DB: ${sessionId}`);
@@ -86,6 +98,26 @@ const getConversation = async (sessionId) => {
   } catch (error) {
     logger.error(`Error getting conversation from DB: ${error.message || error}`);
     return null;
+  }
+};
+
+/**
+ * Get all conversations by user ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Array>}
+ */
+const getConversationsByUserId = async (userId) => {
+  try {
+    const conversations = await db('ai_conversations')
+      .where({ user_id: userId })
+      .orderBy('last_message_at', 'desc')
+      .select('session_id', 'user_id', 'message_count', 'last_message_at', 'created_at', 'updated_at', 'messages');
+
+    logger.debug(`Conversations loaded for user: ${userId} (${conversations.length} sessions)`);
+    return conversations;
+  } catch (error) {
+    logger.error(`Error getting conversations by user: ${error.message || error}`);
+    return [];
   }
 };
 
@@ -133,5 +165,6 @@ module.exports = {
   saveConversation,
   getConversation,
   deleteConversation,
+  getConversationsByUserId,
   cleanupExpiredConversations,
 };

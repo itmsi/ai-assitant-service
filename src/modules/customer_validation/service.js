@@ -3,6 +3,7 @@ const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const aiConfig = require('../../config/ai');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
+const axios = require('axios');
 const { pgCore } = require('../../config/database');
 const { setupDblink, executeDblinkQueryWithRetry } = require('../../utils/dblink');
 
@@ -21,7 +22,7 @@ const initializeModel = () => {
 
     return new ChatOpenAI({
       modelName: aiConfig.OPENAI_MODEL,
-      temperature: 0.3, // Lower temperature untuk validasi yang lebih akurat
+      temperature: 0.0, // Lowest temperature untuk validasi yang ketat dan deterministik
       maxTokens: aiConfig.OPENAI_MAX_TOKENS,
       openAIApiKey: aiConfig.OPENAI_API_KEY,
     });
@@ -38,7 +39,7 @@ const initializeModel = () => {
 
     return new ChatOpenAI({
       modelName: aiConfig.SUMOPOD_MODEL,
-      temperature: 0.3,
+      temperature: 0.0, // Lowest temperature untuk validasi yang deterministik
       maxTokens: aiConfig.SUMOPOD_MAX_TOKENS,
       openAIApiKey: aiConfig.SUMOPOD_API_KEY,
       configuration: {
@@ -54,129 +55,86 @@ const initializeModel = () => {
 /**
  * Get customer names from database using dblink utility
  */
-const getCustomersFromDatabase = async () => {
+const getCustomersFromAPI = async (authHeader) => {
   try {
-    // Setup dblink connection menggunakan utility
-    const dblinkReady = await setupDblink();
-    if (!dblinkReady) {
-      const dbGateSSOHost = process.env.DB_GATE_SSO_HOST || 'localhost';
-      const dbGateSSOPort = process.env.DB_GATE_SSO_PORT || '5432';
-      const dbGateSSOName = process.env.DB_GATE_SSO_NAME || 'gate_sso';
-      
-      throw new Error(
-        `Gagal setup koneksi dblink ke database gate_sso di ${dbGateSSOHost}:${dbGateSSOPort}/${dbGateSSOName}. ` +
-        `Pastikan: (1) Database gate_sso sedang berjalan, (2) Host dan port benar, ` +
-        `(3) Firewall/network mengizinkan koneksi, (4) Kredensial database benar, ` +
-        `(5) Extension dblink sudah diaktifkan.`
-      );
+    logger.info('[CUSTOMER_VALIDATION] Fetching customers from API with pagination...');
+    const baseUrl = process.env.API_GATEWAY_BASE_URL || 'https://dev-gateway.motorsights.com';
+    const url = `${baseUrl}/api/customers/get`;
+
+    let allCustomerNames = [];
+    let page = 1;
+    const limit = 100;
+    let hasMoreData = true;
+
+    while (hasMoreData) {
+      logger.info(`[CUSTOMER_VALIDATION] Fetching page ${page} with limit ${limit}...`);
+
+      const response = await axios.post(url, {
+        page: page,
+        limit: limit,
+        sort_by: "created_at",
+        sort_order: "desc"
+      }, {
+        headers: {
+          'accept': 'application/json',
+          'Authorization': authHeader,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const json = response.data;
+
+      let listData = [];
+      if (json && json.data && Array.isArray(json.data.data)) {
+        listData = json.data.data;
+      } else if (json && Array.isArray(json.data)) {
+        listData = json.data;
+      }
+
+      const namesOnPage = listData
+        .map(row => row.customer_name)
+        .filter(name => name && name.trim().length > 0);
+
+      allCustomerNames.push(...namesOnPage);
+
+      // Jika jumlah data yang didapat lebih kecil dari limit, berarti ini adalah halaman terakhir.
+      if (listData.length < limit) {
+        hasMoreData = false;
+      } else {
+        page++; // Lanjut ke halaman berikutnya
+      }
     }
 
-    logger.info('[CUSTOMER_VALIDATION] Dblink connection ready, querying customers...');
-
-    // Build inner query untuk dblink - ambil customer_name dari tabel customers
-    const innerQuery = `SELECT customer_name FROM customers WHERE is_delete = false`;
-    
-    // Escape inner query untuk dblink (single quote menjadi double single quote)
-    const escapedInnerQuery = innerQuery.replace(/'/g, "''");
-    
-    // Build final query using dblink dengan named connection 'gate_sso_conn'
-    const finalQuery = `SELECT customer_name
-      FROM dblink('gate_sso_conn', '${escapedInnerQuery}') AS customer_data(
-        customer_name varchar
-      )`;
-
-    // Execute query dengan retry mechanism
-    const result = await executeDblinkQueryWithRetry(async () => {
-      return await pgCore.raw(finalQuery);
-    });
-    
-    // Extract customer names dari result
-    const customerNames = result.rows
-      .map(row => row.customer_name)
-      .filter(name => name && name.trim().length > 0);
-    
-    logger.info(`[CUSTOMER_VALIDATION] Retrieved ${customerNames.length} customer names from database`);
-    return customerNames;
+    logger.info(`[CUSTOMER_VALIDATION] Pagination complete. Retrieved total ${allCustomerNames.length} customer names from API`);
+    return allCustomerNames;
   } catch (error) {
-    const errorMessage = error.message || error.toString();
-    logger.error(`[CUSTOMER_VALIDATION] Error getting customers from database: ${errorMessage}`);
-    
-    // Specific error handling untuk berbagai jenis error
-    if (errorMessage.includes('could not establish connection') || 
-        errorMessage.includes('connection refused') ||
-        errorMessage.includes('ECONNREFUSED')) {
-      const dbGateSSOHost = process.env.DB_GATE_SSO_HOST || 'localhost';
-      const dbGateSSOPort = process.env.DB_GATE_SSO_PORT || '5432';
-      throw new Error(
-        `Gagal terhubung ke database gate_sso di ${dbGateSSOHost}:${dbGateSSOPort}. ` +
-        `Pastikan: (1) Database gate_sso sedang berjalan, (2) Host dan port benar, ` +
-        `(3) Firewall/network mengizinkan koneksi, (4) Kredensial database benar. ` +
-        `Detail error: ${errorMessage}`
-      );
-    }
-
-    if (errorMessage.includes('authentication failed') || 
-        errorMessage.includes('password authentication failed')) {
-      throw new Error(
-        `Autentikasi ke database gate_sso gagal. ` +
-        `Pastikan username (${process.env.DB_GATE_SSO_USER || 'msiserver'}) dan password benar. ` +
-        `Detail error: ${errorMessage}`
-      );
-    }
-
-    if (errorMessage.includes('database') && errorMessage.includes('does not exist')) {
-      throw new Error(
-        `Database ${process.env.DB_GATE_SSO_NAME || 'gate_sso'} tidak ditemukan. ` +
-        `Pastikan nama database benar. Detail error: ${errorMessage}`
-      );
-    }
-
-    if (errorMessage.includes('dblink') || errorMessage.includes('extension')) {
-      throw new Error(
-        `Error dblink extension: ${errorMessage}. ` +
-        `Pastikan extension dblink sudah diaktifkan dengan: CREATE EXTENSION IF NOT EXISTS dblink; ` +
-        `(membutuhkan superuser permission)`
-      );
-    }
-
-    if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
-      throw new Error(
-        `Tabel customers tidak ditemukan di database gate_sso. ` +
-        `Pastikan tabel customers sudah ada. Detail error: ${errorMessage}`
-      );
-    }
-
-    // Generic error
-    throw new Error(
-      `Gagal mengambil data customer dari database gate_sso: ${errorMessage}. ` +
-      `Pastikan konfigurasi database benar dan database dapat diakses.`
-    );
+    logger.error(`[CUSTOMER_VALIDATION] Error fetching customers from API: ${error.message}`);
+    throw new Error(`Gagal mengambil data customer dari API: ${error.message}`);
   }
 };
+
 
 /**
  * Validate duplicate customers using AI
  */
-const validateDuplicateCustomers = async (requestCustomerNames) => {
+const validateDuplicateCustomers = async (requestCustomerNames, authHeader) => {
   try {
-    // Get customers from database
+    // Get customers from API
     let existingCustomers = [];
     try {
-      existingCustomers = await getCustomersFromDatabase();
+      if (!authHeader) {
+        throw new Error("Authorization header is missing");
+      }
+      existingCustomers = await getCustomersFromAPI(authHeader);
     } catch (dbError) {
       // Jika gagal mengambil data dari database, return error yang informatif
-      logger.error(`Failed to get customers from database: ${dbError.message}`);
+      logger.error(`Failed to get customers from API: ${dbError.message} `);
       throw {
-        name: 'DatabaseConnectionError',
+        name: 'APIConnectionError',
         message: dbError.message,
-        code: 'DB_CONNECTION_ERROR',
+        code: 'API_CONNECTION_ERROR',
         details: {
-          suggestion: 'Pastikan database gate_sso dapat diakses dan konfigurasi dblink benar',
-          config: {
-            host: process.env.DB_GATE_SSO_HOST,
-            port: process.env.DB_GATE_SSO_PORT,
-            database: process.env.DB_GATE_SSO_NAME
-          }
+          suggestion: 'Pastikan gateway motosights dapat diakses'
         }
       };
     }
@@ -197,50 +155,52 @@ const validateDuplicateCustomers = async (requestCustomerNames) => {
       model = initializeModel();
       logger.info('[CUSTOMER_VALIDATION] AI model initialized successfully');
     } catch (aiInitError) {
-      logger.error(`[CUSTOMER_VALIDATION] Failed to initialize AI model: ${aiInitError.message}`);
+      logger.error(`[CUSTOMER_VALIDATION] Failed to initialize AI model: ${aiInitError.message} `);
       throw new Error(
-        `Gagal menginisialisasi AI model: ${aiInitError.message}. ` +
-        `Pastikan AI_ENABLED=true dan konfigurasi AI service benar.`
+        `Gagal menginisialisasi AI model: ${aiInitError.message}.` +
+        `Pastikan AI_ENABLED = true dan konfigurasi AI service benar.`
       );
     }
 
     // Prepare prompt untuk AI
-    const systemPrompt = `Anda adalah asisten yang ahli dalam mendeteksi duplikat nama customer. 
-Tugas Anda adalah membandingkan daftar nama customer yang diberikan dengan daftar nama customer yang sudah ada di database.
+    const systemPrompt = `Anda adalah asisten data spesialis yang SANGAT KETAT dalam mendeteksi duplikat nama customer.
+Tugas Anda membandingkan daftar nama request dengan daftar nama di database.
 
-Identifikasi:
-1. Nama yang SAMA PERSIS (identik)
-2. Nama yang MENYERUPAI (hampir sama, mungkin typo atau variasi penulisan)
-3. Nama yang KEMBAR (duplikat dengan variasi kecil)
+ATURAN SANGAT KETAT(WAJIB DIIKUTI):
+1. Kembalikan kecocokan(match) jika nama BENAR-BENAR SAMA, ATAU jika terdapat kemiripan yang sangat kuat secara pelafalan (fonetik), ejaan, maupun tata letak kata. Contoh kemiripan yang valid: typo huruf, pengulangan konsonan ("HARIS" vs "HARRIS"), perbedaan urutan/tata letak kata ("PT JAYA ABADI NUSANTARA" vs "PT ABADI JAYA NUSANTARA"), singkatan PT/CV/Bapak/Ibu, beda spasi ("PT HARIS TESTING" vs "HARIS TESTING"), atau kapitalisasi.
+2. Jika nama berbeda secara substansial(contoh: "JIHONDU" sangat berbeda dengan "HARIS" atau "PT HARIS TESTING"), MAKA ITU BUKAN DUPLIKAT. JANGAN MASUKKAN KE DALAM HASIL.
+3. Tingkat kemiripan riil wajib >= 50%. Jangan pernah mengarang kemiripan untuk nama yang jelas-jelas berbeda bunyi atau mayoritas huruf-hurufnya. Jika hanya mirip 1 huruf dari 10 panjang karakter, maka tolak.
+4. Jika tidak menemukan satupun nama yang masuk akal cocoknya sesuai aturan di atas, WAJIB kembalikan JSON dengan hasDuplicates: false dan duplicates: [].
 
-Berikan respon dalam format JSON dengan struktur:
-{
-  "hasDuplicates": true/false,
-  "duplicates": [
-    {
-      "requestName": "nama dari request",
-      "matchedName": "nama yang match dari database",
-      "matchType": "identical" | "similar" | "duplicate",
-      "similarity": "tingkat kemiripan dalam persen"
-    }
-  ]
-}
+Identifikasi jenis kemiripan(hanya jika lolos aturan di atas):
+1. "identical": Nama SAMA PERSIS(mengabaikan huruf besar / kecil).
+2. "similar": Kemiripan fonetik (bunyi mirip: "HARIS" vs "HARRIS"), Typo minor, beda spasi / tanda baca, status PT / CV / Tbk.
+3. "duplicate": Perbedaan urutan/letak kata ("JAYA ABADI" vs "ABADI JAYA"), atau nama dengan singkatan yang lazim memiliki makna sama.
 
-Jika tidak ada duplikat, kembalikan:
-{
-  "hasDuplicates": false,
-  "duplicates": []
-}`;
+Format Wajib JSON Output:
+      {
+        "hasDuplicates": true / false,
+        "duplicates": [
+          {
+            "requestName": "nama yang dicek dari input",
+            "matchedName": "nama database yang cocok",
+            "matchType": "identical" | "similar" | "duplicate",
+            "similarity": "persentase kemiripan (misal '90%')"
+          }
+        ]
+      } `;
 
     const userPrompt = `Silakan bandingkan daftar nama customer berikut dengan data yang sudah ada di database:
 
-**Nama Customer dari Request:**
-${JSON.stringify(requestCustomerNames, null, 2)}
+** Nama Customer dari Request:**
+    ${JSON.stringify(requestCustomerNames, null, 2)}
 
-**Nama Customer yang Sudah Ada di Database:**
-${JSON.stringify(existingCustomers, null, 2)}
+    ** Nama Customer yang Sudah Ada di Database:**
+    ${JSON.stringify(existingCustomers, null, 2)}
 
-Tolong identifikasi apakah ada nama yang sama, menyerupai, atau kembar. Berikan respon dalam format JSON seperti yang dijelaskan di system prompt.`;
+Tolaknya setiap nama yang tidak mirip secara kasat mata, singkatan, atau pelafalan.
+Mohon analisa dengan SANGAT KETAT, jangan melakukan halusinasi pencocokan.
+Berikan respon dalam format JSON persis seperti yang dijelaskan di system prompt.`;
 
     // Call AI
     let response;
@@ -254,12 +214,12 @@ Tolong identifikasi apakah ada nama yang sama, menyerupai, atau kembar. Berikan 
 
       response = await model.invoke(messages);
       responseContent = response.content || response.text || '';
-      logger.info(`[CUSTOMER_VALIDATION] AI response received, length: ${responseContent.length}`);
+      logger.info(`[CUSTOMER_VALIDATION] AI response received, length: ${responseContent.length} `);
     } catch (aiError) {
-      logger.error(`[CUSTOMER_VALIDATION] Error calling AI service: ${aiError.message}`);
-      logger.error(`[CUSTOMER_VALIDATION] AI error stack: ${aiError.stack}`);
+      logger.error(`[CUSTOMER_VALIDATION] Error calling AI service: ${aiError.message} `);
+      logger.error(`[CUSTOMER_VALIDATION] AI error stack: ${aiError.stack} `);
       throw new Error(
-        `Gagal memanggil AI service: ${aiError.message}. ` +
+        `Gagal memanggil AI service: ${aiError.message}.` +
         `Pastikan API key valid dan service dapat diakses.`
       );
     }
@@ -275,19 +235,19 @@ Tolong identifikasi apakah ada nama yang sama, menyerupai, atau kembar. Berikan 
         jsonString = jsonMatch[0];
       }
       aiResult = JSON.parse(jsonString);
-      logger.info(`[CUSTOMER_VALIDATION] AI response parsed successfully. hasDuplicates: ${aiResult.hasDuplicates}, duplicates count: ${aiResult.duplicates?.length || 0}`);
+      logger.info(`[CUSTOMER_VALIDATION] AI response parsed successfully.hasDuplicates: ${aiResult.hasDuplicates}, duplicates count: ${aiResult.duplicates?.length || 0} `);
     } catch (parseError) {
-      logger.warn(`[CUSTOMER_VALIDATION] Failed to parse AI response as JSON: ${parseError.message}`);
-      logger.warn(`[CUSTOMER_VALIDATION] Raw AI response (first 500 chars): ${responseContent.substring(0, 500)}`);
+      logger.warn(`[CUSTOMER_VALIDATION] Failed to parse AI response as JSON: ${parseError.message} `);
+      logger.warn(`[CUSTOMER_VALIDATION] Raw AI response(first 500 chars): ${responseContent.substring(0, 500)} `);
       // Fallback: try to extract duplicates manually
       aiResult = {
-        hasDuplicates: responseContent.toLowerCase().includes('duplikat') || 
-                      responseContent.toLowerCase().includes('sama') ||
-                      responseContent.toLowerCase().includes('match'),
+        hasDuplicates: responseContent.toLowerCase().includes('duplikat') ||
+          responseContent.toLowerCase().includes('sama') ||
+          responseContent.toLowerCase().includes('match'),
         duplicates: [],
         rawResponse: responseContent.substring(0, 1000) // Limit raw response untuk logging
       };
-      logger.warn(`[CUSTOMER_VALIDATION] Using fallback result. hasDuplicates: ${aiResult.hasDuplicates}`);
+      logger.warn(`[CUSTOMER_VALIDATION] Using fallback result.hasDuplicates: ${aiResult.hasDuplicates} `);
     }
 
     // Validate aiResult structure
@@ -308,50 +268,50 @@ Tolong identifikasi apakah ada nama yang sama, menyerupai, atau kembar. Berikan 
     const result = {
       hasDuplicates: aiResult.hasDuplicates || false,
       duplicates: aiResult.duplicates || [],
-      message: aiResult.hasDuplicates 
+      message: aiResult.hasDuplicates
         ? `Ditemukan ${aiResult.duplicates.length} nama customer yang duplikat`
         : 'Tidak ada duplikat ditemukan'
     };
 
-    logger.info(`[CUSTOMER_VALIDATION] Validation completed. Result: ${JSON.stringify(result)}`);
+    logger.info(`[CUSTOMER_VALIDATION] Validation completed.Result: ${JSON.stringify(result)} `);
     return result;
   } catch (error) {
     // Log full error details
-    logger.error(`[CUSTOMER_VALIDATION] Error in validateDuplicateCustomers: ${error.message || error}`);
-    logger.error(`[CUSTOMER_VALIDATION] Error stack: ${error.stack}`);
-    logger.error(`[CUSTOMER_VALIDATION] Error name: ${error.name}`);
-    logger.error(`[CUSTOMER_VALIDATION] Error code: ${error.code}`);
+    logger.error(`[CUSTOMER_VALIDATION] Error in validateDuplicateCustomers: ${error.message || error} `);
+    logger.error(`[CUSTOMER_VALIDATION] Error stack: ${error.stack} `);
+    logger.error(`[CUSTOMER_VALIDATION] Error name: ${error.name} `);
+    logger.error(`[CUSTOMER_VALIDATION] Error code: ${error.code} `);
 
     // Handle specific error types
-    if (error.name === 'DatabaseConnectionError') {
-      logger.error(`[CUSTOMER_VALIDATION] Database connection error during validation: ${error.message}`);
+    if (error.name === 'APIConnectionError') {
+      logger.error(`[CUSTOMER_VALIDATION] API connection error during validation: ${error.message} `);
       throw error; // Re-throw dengan error object yang sudah diformat
     }
 
     // Handle AI service errors
     if (error.message && (
-      error.message.includes('API key') || 
+      error.message.includes('API key') ||
       error.message.includes('not configured') ||
       error.message.includes('AI Assistant is not enabled') ||
       error.message.includes('menginisialisasi AI') ||
       error.message.includes('memanggil AI service')
     )) {
-      logger.error(`[CUSTOMER_VALIDATION] AI service error: ${error.message}`);
+      logger.error(`[CUSTOMER_VALIDATION] AI service error: ${error.message} `);
       throw new Error(
         `Gagal melakukan validasi duplikat: Konfigurasi AI service tidak valid. ` +
-        `Pastikan AI_ENABLED=true dan API key sudah dikonfigurasi dengan benar. ` +
-        `Detail: ${error.message}`
+        `Pastikan AI_ENABLED = true dan API key sudah dikonfigurasi dengan benar. ` +
+        `Detail: ${error.message} `
       );
     }
 
     // Generic error
-    logger.error(`[CUSTOMER_VALIDATION] Generic error validating duplicate customers: ${error.message || error}`);
-    throw new Error(`Gagal melakukan validasi duplikat: ${error.message || error}`);
+    logger.error(`[CUSTOMER_VALIDATION] Generic error validating duplicate customers: ${error.message || error} `);
+    throw new Error(`Gagal melakukan validasi duplikat: ${error.message || error} `);
   }
 };
 
 module.exports = {
   validateDuplicateCustomers,
-  getCustomersFromDatabase
+  getCustomersFromAPI
 };
 

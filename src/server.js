@@ -1,4 +1,5 @@
 // make sure for crashing handler continues to run
+const http = require('http');
 const app = require('./app')
 const { initRedis, closeRedis } = require('./utils/redis')
 
@@ -45,7 +46,9 @@ if (process.env.REDIS_ENABLED === 'true') {
   initRedis()
 }
 
-app.listen(process.env.APP_PORT, () => {
+const server = http.createServer(app);
+
+server.listen(process.env.APP_PORT, () => {
   if (process.env.NODE_ENV === 'development') {
     console.info(`${process?.env.APP_NAME} running in port ${process.env.APP_PORT}`)
   } else {

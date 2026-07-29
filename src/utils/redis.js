@@ -72,8 +72,8 @@ const saveConversation = async (userId, sessionId, messages) => {
  * Now uses database instead of Redis
  */
 const getConversation = async (userId, sessionId) => {
-  // Use database repository for conversation retrieval
-  return await conversationRepo.getConversation(sessionId);
+  // Use database repository for conversation retrieval (with ownership check)
+  return await conversationRepo.getConversation(sessionId, userId);
 };
 
 /**
