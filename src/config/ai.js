@@ -38,6 +38,12 @@ module.exports = {
   // Fallback ke environment variable jika database tidak tersedia
   // Key default: 'system_prompt_default'
   AI_SYSTEM_PROMPT_KEY: process.env.AI_SYSTEM_PROMPT_KEY || 'system_prompt_default',
+
+  // Memory Configuration
+  AI_MEMORY_ENABLED: process.env.AI_MEMORY_ENABLED !== 'false', // Default: enabled
+  AI_MEMORY_EXTRACTOR_MODEL: process.env.AI_MEMORY_EXTRACTOR_MODEL || 'gpt-4o-mini',
+  AI_MEMORY_CONFIDENCE_THRESHOLD: parseFloat(process.env.AI_MEMORY_CONFIDENCE_THRESHOLD || '0.60'),
+  AI_MEMORY_MAX_INJECT: parseInt(process.env.AI_MEMORY_MAX_INJECT || '7'),
   
   // Fallback prompt jika database tidak tersedia (untuk development/testing)
   AI_SYSTEM_PROMPT_FALLBACK: process.env.AI_SYSTEM_PROMPT || `Kamu adalah Mosa, asisten virtual resmi Motor Sights International (MSI).

@@ -142,6 +142,13 @@ const {
 
 const { summarizeData } = require('./summarize');
 
+const {
+  memorySave,
+  memorySearch,
+  memoryDelete,
+  analyzeToolResult,
+} = require('./memory');
+
 /**
  * Tool to Module Mapping
  */
@@ -431,6 +438,9 @@ const TOOL_MODULE_MAP = {
   [updateEPCTransactionOrder.name]: ['EPC'],
   [deleteEPCTransactionOrder.name]: ['EPC'],
   [summarizeData.name]: ['GLOBAL'],
+  [memorySave.name]: ['GLOBAL'],
+  [memorySearch.name]: ['GLOBAL'],
+  [memoryDelete.name]: ['GLOBAL'],
   [callGatewayEndpoint.name]: ['System'],
 };
 
@@ -728,6 +738,10 @@ const toolsRegistry = {
   [createEPCTransactionOrder.name]: createEPCTransactionOrder,
   [updateEPCTransactionOrder.name]: updateEPCTransactionOrder,
   [deleteEPCTransactionOrder.name]: deleteEPCTransactionOrder,
+  // Memory Tools
+  [memorySave.name]: memorySave,
+  [memorySearch.name]: memorySearch,
+  [memoryDelete.name]: memoryDelete,
   // Others
   [searchEmployeeCompany.name]: searchEmployeeCompany,
   [searchEmployeeDepartment.name]: searchEmployeeDepartment,
@@ -804,7 +818,7 @@ const getToolsForLangChain = (allowedModules) => {
 /**
  * Execute tool by name
  */
-const executeTool = async (toolName, parameters, authToken, mcpPermissions = null) => {
+const executeTool = async (toolName, parameters, authToken, mcpPermissions = null, userId = null) => {
   const tool = toolsRegistry[toolName];
   if (!tool) {
     return { success: false, message: `Tool ${toolName} tidak ditemukan` };
@@ -834,7 +848,23 @@ const executeTool = async (toolName, parameters, authToken, mcpPermissions = nul
     }
   }
 
-  return await tool.execute(parameters, authToken);
+  const result = await tool.execute(parameters, authToken);
+
+  // 🔥 MCP Feedback Learning — extract memories from tool result (async, fire & forget)
+  const feedbackUserId = userId || parameters?.userId;
+  if (result && feedbackUserId) {
+    analyzeToolResult(toolName, parameters, result, feedbackUserId)
+      .then(saved => {
+        if (saved.length > 0) {
+          logger.info(`[MemoryFeedback] Learned ${saved.length} memories from tool '${toolName}' for user ${feedbackUserId}`);
+        }
+      })
+      .catch(err => {
+        logger.debug(`[MemoryFeedback] Skip feedback for ${toolName}: ${err.message}`);
+      });
+  }
+
+  return result;
 };
 
 module.exports = {
@@ -1127,4 +1157,9 @@ module.exports = {
   calculateQuotationIslandTotal,
   calculateIUPCount,
   calculateContractorCount,
+  // Memory Tools
+  memorySave,
+  memorySearch,
+  memoryDelete,
+  analyzeToolResult,
 };

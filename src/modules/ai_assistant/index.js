@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const handler = require('./handler');
 const { optionalSSOToken } = require('./middleware/sso');
+let memoryRoutes = null;
+try {
+  memoryRoutes = require('./memory/index');
+} catch (err) {
+  // Memory routes belum siap
+}
 
 console.log('AI Assistant routes initialized');
 // Optional: Add token verification if needed
@@ -68,5 +74,14 @@ router.post(
   optionalSSOToken,
   handler.chatStream
 );
+
+/**
+ * Memory routes — admin CRUD untuk user memories
+ * /api/mosa/ai-assistant/memory
+ */
+if (memoryRoutes) {
+  router.use('/memory', memoryRoutes);
+  console.log('Memory routes registered');
+}
 
 module.exports = router;

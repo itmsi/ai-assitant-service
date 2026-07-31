@@ -494,6 +494,20 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
       systemPrompt += `\n\n📋 **ACCESS CONTROL**\nThe user has access to these modules: [${modulesList}].\n✅ You MAY fetch data and use tools from these modules.\n❌ You MUST NOT access data or use tools from any module NOT in this list.\n\nWhen the user asks about something, check if their request falls under one of their allowed modules. If YES → proceed normally and use the available tools. If NO (the request is clearly about a module NOT in their list) → politely refuse.`;
     }
 
+    // 🔥 Inject user memories ke system prompt (jika ada)
+    try {
+      const memoryService = require('./memory/memoryService');
+      const memories = await memoryService.getRelevantMemories(userId);
+      if (memories && memories.length > 0) {
+        const memoryText = memoryService.formatMemoriesForPrompt(memories);
+        systemPrompt += memoryText;
+        logger.info(`[Memory] Injected ${memories.length} memories into prompt`);
+      }
+    } catch (err) {
+      // Memory module tidak tersedia — skip, system prompt tetap utuh
+      logger.debug(`[Memory] Injection skipped: ${err.message}`);
+    }
+
     // Get conversation history (fallback to empty array if Redis not available)
     let conversationHistory = [];
     try {
@@ -563,7 +577,7 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
 
           logger.info(`Executing tool: ${toolName}`, toolArgs);
 
-          const result = await executeTool(toolName, toolArgs, authToken);
+          const result = await executeTool(toolName, toolArgs, authToken, null, userId);
 
           // Create ToolMessage with results
           const toolMessage = new ToolMessage({

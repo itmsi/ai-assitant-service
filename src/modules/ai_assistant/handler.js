@@ -14,12 +14,21 @@ const aiConfig = require('../../config/ai');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
+// Memory Service — async extraction setelah chat response
+let memoryService = null;
+try {
+  memoryService = require('./memory/memoryService');
+} catch (err) {
+  // Memory module belum tersedia — skip
+}
+
 /**
  * Helper: extract userId dari req.user (dari SSO middleware)
+ * Returns null jika tidak ada token/user yang valid
  */
 const getUserId = (req) => {
-  if (!req.user) return 'anonymous';
-  return req.user.sub || req.user.userId || req.user.id || req.user.employee_id || req.user.username || 'anonymous';
+  if (!req.user) return null;
+  return req.user.sub || req.user.userId || req.user.id || req.user.employee_id || req.user.username || null;
 };
 
 /**
@@ -51,6 +60,11 @@ const chat = async (req, res) => {
       finalSessionId = `session_${userId}_${Date.now()}`;
     }
 
+    // 🔥 Auto-provision profile memories dari token (hanya sekali per user)
+    if (memoryService && req.user && userId) {
+      await memoryService.provisionUserProfile(req.user, userId);
+    }
+
     // Process chat
     const result = await processChat(
       message.trim(),
@@ -60,7 +74,8 @@ const chat = async (req, res) => {
       system // Pass system modules access list (undefined if not provided)
     );
 
-    return baseResponseGeneral(res, {
+    // Kirim response ke user duluan
+    baseResponseGeneral(res, {
       success: true,
       message: 'Chat berhasil diproses',
       data: {
@@ -69,6 +84,23 @@ const chat = async (req, res) => {
         conversationHistory: result.conversationHistory,
       },
     });
+
+    // 🔥 Async memory extraction — fire & forget, tidak nge-block response user
+    if (memoryService && userId) {
+      memoryService.runExtraction(message.trim(), userId)
+        .then(saved => {
+          if (saved.length > 0) {
+            logger.info(`[Memory] ✅ ${saved.length} memories saved for user ${userId}`);
+          } else {
+            logger.info(`[Memory] ⏭️  Nothing to save for user ${userId}`);
+          }
+        })
+        .catch(err => {
+          logger.warn(`[Memory] Async extraction error: ${err.message}`);
+        });
+    }
+
+    return;
   } catch (error) {
     logger.error(`Error in chat handler: ${error.message || error}`);
     return baseResponseGeneral(res.status(500), {
@@ -159,11 +191,10 @@ const listByUser = async (req, res) => {
   try {
     const userId = req.body?.user_id || getUserId(req);
 
-    if (!userId || userId === 'anonymous') {
+    if (!userId) {
       return baseResponseGeneral(res, {
-        success: true,
-        message: 'User tidak terautentikasi, tidak ada riwayat',
-        data: { userId: 'anonymous', total: 0, conversations: [] },
+        success: false,
+        message: 'User tidak terautentikasi — token tidak valid atau tidak ada',
       });
     }
 
@@ -379,7 +410,29 @@ const chatStream = async (req, res) => {
   const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
 
   try {
+    // 🔥 Auto-provision profile memories dari token (hanya sekali per user)
+    if (memoryService && req.user && userId) {
+      try {
+        await memoryService.provisionUserProfile(req.user, userId);
+      } catch (err) {
+        logger.debug(`[Memory] Stream auto-provision skipped: ${err.message}`);
+      }
+    }
+
     let systemPrompt = await getSystemPrompt();
+
+    // 🔥 Inject user memories ke prompt (jika ada)
+    try {
+      const memoryService = require('./memory/memoryService');
+      const memories = await memoryService.getRelevantMemories(userId);
+      if (memories && memories.length > 0) {
+        const memoryText = memoryService.formatMemoriesForPrompt(memories);
+        systemPrompt += memoryText;
+        logger.info(`[Memory] Stream: Injected ${memories.length} memories into prompt`);
+      }
+    } catch (err) {
+      logger.debug(`[Memory] Stream injection skipped: ${err.message}`);
+    }
 
     // Build access control if provided
     if (Array.isArray(system)) {
@@ -389,7 +442,7 @@ const chatStream = async (req, res) => {
     // Load conversation history
     let conversationHistory = [];
     try {
-      conversationHistory = await getConversation(userId, sessionId) || [];
+      conversationHistory = await getConversation(userId, finalSessionId) || [];
     } catch { conversationHistory = []; }
 
     // Summarize if needed
@@ -493,7 +546,7 @@ const chatStream = async (req, res) => {
 
         try {
           logger.info(`[Stream] Executing tool: ${toolCall.name}`, toolCall.args);
-          const result = await executeTool(toolCall.name, toolCall.args || {}, authToken);
+          const result = await executeTool(toolCall.name, toolCall.args || {}, authToken, null, userId);
 
           openaiMessages.push({
             role: 'tool',
@@ -540,6 +593,21 @@ const chatStream = async (req, res) => {
       logger.info(`[Stream] Conversation saved: ${finalSessionId} (${historyCopy.length} messages)`);
     } catch (saveError) {
       logger.warn(`[Stream] Failed to save conversation ${finalSessionId}: ${saveError.message}`);
+    }
+
+    // 🔥 Async memory extraction — fire & forget setelah stream selesai
+    if (memoryService && userId) {
+      memoryService.runExtraction(message.trim(), userId)
+        .then(saved => {
+          if (saved.length > 0) {
+            logger.info(`[Memory] ✅ Stream: ${saved.length} memories saved for user ${userId}`);
+          } else {
+            logger.info(`[Memory] ⏭️  Stream: nothing to save for user ${userId}`);
+          }
+        })
+        .catch(err => {
+          logger.warn(`[Memory] Stream extraction error: ${err.message}`);
+        });
     }
 
   } catch (error) {
