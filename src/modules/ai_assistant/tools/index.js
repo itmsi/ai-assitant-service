@@ -760,6 +760,15 @@ const toolsRegistry = {
   [calculateContractorCount.name]: calculateContractorCount,
 };
 
+// 🔥 Auto-enrich field descriptions untuk SEMUA tools
+// - Field *_id → deskripsi referensi master data
+// - Field tanpa description → label humanized
+// - Field enum → daftar pilihan
+// Idempotent: hanya isi yang kosong, tidak merusak description manual.
+const { enrichAllTools } = require('./enrichFields');
+enrichAllTools(toolsRegistry);
+logger.info(`[Tools] Auto-enriched ${Object.keys(toolsRegistry).length} tool schemas with field descriptions`);
+
 const MAX_TOOLS = 120; // OpenAI limit is 128 — keep safe margin
 
 /**
