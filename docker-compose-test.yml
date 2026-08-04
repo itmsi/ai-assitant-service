@@ -40,6 +40,9 @@ services:
       - ELASTIC_APM_ENVIRONMENT=production
       - ELASTIC_APM_ACTIVE=false
       - ELASTIC_APM_DISABLED=true
+      # Mem0 memory server (internal network)
+      - MEM0_BASE_URL=http://mem0:8000
+      - MEM0_API_KEY=${MEM0_API_KEY}
     networks:
       - infra_net
     labels:
@@ -78,6 +81,9 @@ services:
       # APM disable
       - ELASTIC_APM_ACTIVE=false
       - ELASTIC_APM_DISABLED=true
+      # Mem0 memory server (internal network)
+      - MEM0_BASE_URL=http://mem0:8000
+      - MEM0_API_KEY=${MEM0_API_KEY}
     networks:
       - infra_net
     labels:
@@ -96,6 +102,68 @@ services:
         reservations:
           memory: 512M
           cpus: '0.25'
+
+  # ============================================================
+  # Mem0 — self-hosted memory server (menggantikan custom memory)
+  # API internal: http://mem0:8000 | Host: http://localhost:9899 (test)
+  # ============================================================
+  mem0-db:
+    container_name: mem0-pgvector-test
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mem0
+      POSTGRES_PASSWORD: mem0
+      POSTGRES_DB: mem0
+    volumes:
+      - mem0_db_data:/var/lib/postgresql/data
+    networks:
+      - infra_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mem0 -d mem0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mem0:
+    container_name: mem0-server-test
+    image: mem0/mem0-api-server:latest
+    restart: unless-stopped
+    depends_on:
+      mem0-db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # LLM & embeddings — pakai Sumopod (OpenAI-compatible), bukan OpenAI
+      # Server Mem0 membaca OPENAI_API_KEY + OPENAI_BASE_URL untuk provider 'openai'
+      - OPENAI_API_KEY=${SUMOPOD_API_KEY}
+      - OPENAI_BASE_URL=${SUMOPOD_BASE_URL}
+      - MEM0_DEFAULT_LLM_MODEL=${SUMOPOD_MODEL:-gpt-5.4}
+      # Vector store — Postgres + pgvector (service mem0-db)
+      - POSTGRES_HOST=mem0-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=mem0
+      - POSTGRES_PASSWORD=mem0
+      - POSTGRES_DBNAME=mem0
+      # Auth — service-to-service pakai ADMIN_API_KEY (legacy X-API-Key)
+      # JWT khusus Mem0, dipisah dari JWT_SECRET aplikasi utama
+      - JWT_SECRET=${MEM0_JWT_SECRET:-mem0-default-jwt-secret-change-me}
+      - ADMIN_API_KEY=${MEM0_API_KEY}
+    ports:
+      - "9899:8000"
+    networks:
+      - infra_net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+volumes:
+  mem0_db_data:
 
 networks:
   infra_net:

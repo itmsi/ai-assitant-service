@@ -769,7 +769,7 @@ const { enrichAllTools } = require('./enrichFields');
 enrichAllTools(toolsRegistry);
 logger.info(`[Tools] Auto-enriched ${Object.keys(toolsRegistry).length} tool schemas with field descriptions`);
 
-const MAX_TOOLS = 120; // OpenAI limit is 128 — keep safe margin
+const MAX_TOOLS = 128; // OpenAI limit is 128 — keep safe margin
 
 /**
  * Convert tools to LangChain format (DYNAMIC — built from TOOL_MODULE_MAP)
@@ -809,10 +809,15 @@ const getToolsForLangChain = (allowedModules) => {
   // Prioritaskan READ tools dulu
   let tools = [...readTools];
 
-  // Tambah WRITE tools kalau masih ada slot
+  // Tambah WRITE tools kalau masih ada slot.
+  // Reserve 1 slot untuk summarizeData yang dijamin di-push di bawah,
+  // agar total tidak melebihi MAX_TOOLS (128).
   if (allowWrite && tools.length < MAX_TOOLS) {
-    const writeBudget = MAX_TOOLS - tools.length;
-    tools = tools.concat(writeTools.slice(0, writeBudget));
+    const alreadyHasSummarize = tools.find(t => t.function.name === summarizeData.name) ? 1 : 0;
+    const writeBudget = MAX_TOOLS - tools.length - (1 - alreadyHasSummarize);
+    if (writeBudget > 0) {
+      tools = tools.concat(writeTools.slice(0, writeBudget));
+    }
   }
 
   // Always include summarizeData

@@ -39,11 +39,49 @@ module.exports = {
   // Key default: 'system_prompt_default'
   AI_SYSTEM_PROMPT_KEY: process.env.AI_SYSTEM_PROMPT_KEY || 'system_prompt_default',
 
-  // Memory Configuration
-  AI_MEMORY_ENABLED: process.env.AI_MEMORY_ENABLED !== 'false', // Default: enabled
-  AI_MEMORY_EXTRACTOR_MODEL: process.env.AI_MEMORY_EXTRACTOR_MODEL || 'gpt-4o-mini',
-  AI_MEMORY_CONFIDENCE_THRESHOLD: parseFloat(process.env.AI_MEMORY_CONFIDENCE_THRESHOLD || '0.60'),
-  AI_MEMORY_MAX_INJECT: parseInt(process.env.AI_MEMORY_MAX_INJECT || '7'),
+  // Memory Configuration — Mem0 (menggantikan custom memory)
+  // MEM0_MODE:
+  //   'server'  → self-hosted Mem0 REST server (Docker/production, Postgres+pgvector)
+  //   'library' → embedded mem0ai SDK, in-memory store + SQLite (local dev TANPA Docker/Postgres)
+  MEM0_MODE: process.env.MEM0_MODE || 'server',
+  MEM0_ENABLED: process.env.MEM0_ENABLED !== 'false', // Default: enabled
+  MEM0_BASE_URL: process.env.MEM0_BASE_URL || 'http://localhost:8000',
+  MEM0_API_KEY: process.env.MEM0_API_KEY || '', // X-API-Key untuk self-hosted server
+  MEM0_TIMEOUT: parseInt(process.env.MEM0_TIMEOUT || '30000', 10),
+  MEM0_MAX_INJECT: parseInt(process.env.MEM0_MAX_INJECT || '7', 10), // max memory di-inject ke prompt
+  MEM0_CACHE_TTL: parseInt(process.env.MEM0_CACHE_TTL || '900', 10), // hot cache Redis 15 menit
+  // Library mode (MEM0_MODE=library): LLM + embedder untuk extraction & search
+  // Default mengikuti AI_MODEL_PROVIDER:
+  //   sumopod → pakai SUMOPOD_* (base URL OpenAI-compatible + SUMOPOD_API_KEY)
+  //   selain itu → pakai OPENAI_* (OPENAI_API_KEY)
+  // Override manual via env MEM0_LLM_* / MEM0_EMBEDDER_*
+  MEM0_LLM_MODEL: process.env.MEM0_LLM_MODEL || (process.env.AI_MODEL_PROVIDER === 'sumopod'
+    ? (process.env.SUMOPOD_MODEL || 'gpt-5.4')
+    : (process.env.OPENAI_MODEL || 'gpt-4o-mini')),
+  MEM0_LLM_BASE_URL: process.env.MEM0_LLM_BASE_URL || (process.env.AI_MODEL_PROVIDER === 'sumopod'
+    ? (process.env.SUMOPOD_BASE_URL || '')
+    : (process.env.OPENAI_API_BASE_URL || '')),
+  MEM0_LLM_API_KEY: process.env.MEM0_LLM_API_KEY || (process.env.AI_MODEL_PROVIDER === 'sumopod'
+    ? (process.env.SUMOPOD_API_KEY || '')
+    : (process.env.OPENAI_API_KEY || '')),
+  MEM0_EMBEDDER_MODEL: process.env.MEM0_EMBEDDER_MODEL || 'text-embedding-3-small',
+  // Base URL embedder; default ikut base URL LLM (agar Sumopod/OpenAI-compatible terpakai)
+  MEM0_EMBEDDER_BASE_URL: process.env.MEM0_EMBEDDER_BASE_URL || '', // kosong → pakai MEM0_LLM_BASE_URL
+  MEM0_HISTORY_DB_PATH: process.env.MEM0_HISTORY_DB_PATH || 'storages/mem0/history.db',
+  // Vector store library mode:
+  //   'memory'   (default) → in-memory, zero infra, data hilang saat restart
+  //   'pgvector' → persistent di Postgres (butuh extension vector di DB target)
+  MEM0_VECTOR_STORE: process.env.MEM0_VECTOR_STORE || 'memory',
+  // Kredensial Postgres untuk vector store pgvector (default ikut DB_*_DEV)
+  MEM0_PG: {
+    connectionString: process.env.MEM0_PG_CONNECTION_STRING || '',
+    host: process.env.MEM0_PG_HOST || process.env.DB_HOST_DEV || 'localhost',
+    port: parseInt(process.env.MEM0_PG_PORT || process.env.DB_PORT_DEV || '5432', 10),
+    user: process.env.MEM0_PG_USER || process.env.DB_USER_DEV || 'postgres',
+    password: process.env.MEM0_PG_PASSWORD || process.env.DB_PASS_DEV || '',
+    dbname: process.env.MEM0_PG_DBNAME || process.env.DB_NAME_DEV || 'ai_assistant',
+    hnsw: process.env.MEM0_PG_HNSW === 'true', // index HNSW (default exact search)
+  },
   
   // Fallback prompt jika database tidak tersedia (untuk development/testing)
   AI_SYSTEM_PROMPT_FALLBACK: process.env.AI_SYSTEM_PROMPT || `Kamu adalah Mosa, asisten virtual resmi Motor Sights International (MSI).
