@@ -129,6 +129,8 @@ services:
     container_name: mem0-server-test
     image: mem0/mem0-api-server:latest
     restart: unless-stopped
+    # Server mem0 v2 butuh migrasi metadata (tabel users/api_keys) sebelum start
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     depends_on:
       mem0-db:
         condition: service_healthy
@@ -141,11 +143,15 @@ services:
       - OPENAI_BASE_URL=${SUMOPOD_BASE_URL}
       - MEM0_DEFAULT_LLM_MODEL=${SUMOPOD_MODEL:-gpt-5.4}
       # Vector store — Postgres + pgvector (service mem0-db)
+      # Server baca POSTGRES_DB (bukan POSTGRES_DBNAME)
       - POSTGRES_HOST=mem0-db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=mem0
       - POSTGRES_PASSWORD=mem0
-      - POSTGRES_DBNAME=mem0
+      - POSTGRES_DB=mem0
+      # DB metadata auth (users/api_keys) — reuse DB mem0
+      - APP_DB_NAME=mem0
+      - MEM0_TELEMETRY=false
       # Auth — service-to-service pakai ADMIN_API_KEY (legacy X-API-Key)
       # JWT khusus Mem0, dipisah dari JWT_SECRET aplikasi utama
       - JWT_SECRET=${MEM0_JWT_SECRET:-mem0-default-jwt-secret-change-me}
