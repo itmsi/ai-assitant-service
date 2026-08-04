@@ -76,6 +76,9 @@ public/uploads/*
 # Docker
 docker-compose.override.yml
 
+# Source clone repo mem0 (dipakai build image server mem0 — jangan di-commit)
+mem0-server/
+
 # Database
 *.sqlite
 *.sqlite3
