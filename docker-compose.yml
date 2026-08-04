@@ -141,6 +141,9 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    # History SQLite server (default HISTORY_DB_PATH=/app/history/history.db)
+    volumes:
+      - mem0_history:/app/history
     environment:
       # LLM & embeddings — pakai Sumopod (OpenAI-compatible), bukan OpenAI
       # Server Mem0 membaca OPENAI_API_KEY + OPENAI_BASE_URL untuk provider 'openai'
@@ -174,6 +177,8 @@ services:
 
 volumes:
   mem0_db_data:
+  # History SQLite server mem0 (jangan dihapus bersama down -v kalau data dibutuhkan)
+  mem0_history:
 
 networks:
   infra_net:
