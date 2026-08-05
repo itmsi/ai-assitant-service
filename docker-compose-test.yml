@@ -128,7 +128,8 @@ services:
   mem0:
     container_name: mem0-server-test
     # Image resmi mem0/mem0-api-server di Docker Hub sudah deprecated & hanya arm64.
-    # Build dari source (repo mem0, tag v2.0.15) — clone ke ./mem0-server di server.
+    # Build dari source DIVENDOR (folder mem0-server/ di-commit ke repo, Dockerfile
+    # sudah di-patch psycopg[binary]) — TANPA clone/sed manual.
     image: mem0/mem0-api-server:latest
     build:
       context: ./mem0-server/server

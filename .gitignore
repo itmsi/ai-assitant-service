@@ -76,8 +76,8 @@ public/uploads/*
 # Docker
 docker-compose.override.yml
 
-# Source clone repo mem0 (dipakai build image server mem0 — jangan di-commit)
-mem0-server/
+# Mem0 server source DIVENDOR (commit ke repo biar build reproduksibel tanpa clone/sed manual)
+# Update: ganti isi mem0-server/ dengan versi baru, lalu commit
 
 # Database
 *.sqlite
