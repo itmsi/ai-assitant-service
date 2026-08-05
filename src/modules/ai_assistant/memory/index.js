@@ -1,11 +1,13 @@
 /**
- * Memory Routes — Admin endpoints untuk manage memory pengguna
+ * Memory Routes — Admin endpoints untuk manage memory pengguna (Mem0)
  *
  * GET    /memory               — List memories (all users or by user_id)
- * GET    /memory/:userId       — Get memories for a specific user
- * DELETE /memory/:id           — Delete a memory by ID
- * POST   /memory/cleanup       — Cleanup expired memories
+ * GET    /memory/:id           — Get a single memory by ID
  * POST   /memory               — Create/update memory manually
+ * PUT    /memory/:id           — Update memory text by ID
+ * DELETE /memory/:id           — Delete a memory by ID
+ * POST   /memory/search        — Semantic search memories
+ * POST   /memory/cleanup       — Cleanup expired memories
  */
 
 const express = require('express');
@@ -116,6 +118,107 @@ router.delete('/:id', async (req, res) => {
     return baseResponseGeneral(res.status(500), {
       success: false,
       message: error.message || 'Failed to delete memory',
+    });
+  }
+});
+
+/**
+ * GET /memory/:id — Get a single memory by ID
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    if (!memoryService) {
+      return baseResponseGeneral(res, { success: false, message: 'Memory service not available' });
+    }
+
+    const { id } = req.params;
+    const memory = await memoryService.getMemoryById(id);
+
+    return baseResponseGeneral(res, {
+      success: !!memory,
+      message: memory ? 'Memory found' : 'Memory not found',
+      data: memory || null,
+    });
+  } catch (error) {
+    logger.error(`Error getting memory: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Failed to get memory',
+    });
+  }
+});
+
+/**
+ * PUT /memory/:id — Update memory text by ID
+ * Body: { text }
+ */
+router.put('/:id', async (req, res) => {
+  try {
+    if (!memoryService) {
+      return baseResponseGeneral(res, { success: false, message: 'Memory service not available' });
+    }
+
+    const { id } = req.params;
+    const { text } = req.body;
+
+    if (!text || !String(text).trim()) {
+      return baseResponseGeneral(res, {
+        success: false,
+        message: 'text wajib diisi',
+      });
+    }
+
+    const updated = await memoryService.updateMemoryById(id, { text });
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Memory updated',
+      data: updated,
+    });
+  } catch (error) {
+    logger.error(`Error updating memory: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Failed to update memory',
+    });
+  }
+});
+
+/**
+ * POST /memory/search — Semantic search memories
+ * Body: { query, userId?, limit? }
+ */
+router.post('/search', async (req, res) => {
+  try {
+    if (!memoryService) {
+      return baseResponseGeneral(res, { success: false, message: 'Memory service not available' });
+    }
+
+    const { query, userId, limit } = req.body;
+
+    if (!query || !String(query).trim()) {
+      return baseResponseGeneral(res, {
+        success: false,
+        message: 'query wajib diisi',
+      });
+    }
+
+    const result = await memoryService.searchMemories({
+      query,
+      userId: userId || null,
+      limit: parseInt(limit || '25', 10),
+    });
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Search completed',
+      data: result,
+    });
+  } catch (error) {
+    logger.error(`Error searching memories: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Failed to search memories',
     });
   }
 });

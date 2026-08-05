@@ -337,6 +337,74 @@ const deleteMemory = async (id) => {
 };
 
 /**
+ * Get satu memory by ID (admin / memory_get tool)
+ * @param {string} id - Mem0 memory ID
+ * @returns {Promise<Object|null>}
+ */
+const getMemoryById = async (id) => {
+  try {
+    const res = await mem0.get(id);
+    return normalize(res, null);
+  } catch (error) {
+    if (error.status === 404) {
+      logger.debug(`[MemoryService] getMemoryById: memory ${id} not found`);
+      return null;
+    }
+    logger.error(`[MemoryService] getMemoryById error: ${error.message || error}`);
+    return null;
+  }
+};
+
+/**
+ * Update memory by ID — timpa teks memory langsung (admin)
+ * @param {string} id - Mem0 memory ID
+ * @param {Object} param
+ * @param {string} param.text - Teks memory baru
+ * @returns {Promise<Object|null>}
+ */
+const updateMemoryById = async (id, { text } = {}) => {
+  if (!id || !text) {
+    throw new Error('id dan text wajib diisi');
+  }
+
+  try {
+    const updated = await mem0.update(id, String(text));
+    logger.info(`[Memory] Updated by ID: ${id} → "${text}"`);
+    return normalize(updated, null) || { id, value: text };
+  } catch (error) {
+    logger.error(`[MemoryService] updateMemoryById error: ${error.message || error}`);
+    throw error;
+  }
+};
+
+/**
+ * Semantic search memories lintas user (admin dashboard)
+ * @param {Object} param
+ * @param {string} param.query - Query pencarian
+ * @param {string|null} param.userId - Opsional, filter per user
+ * @param {number} param.limit
+ * @returns {Promise<{total:number, limit:number, data:Array}>}
+ */
+const searchMemories = async ({ query, userId = null, limit = 25 } = {}) => {
+  if (!query || !String(query).trim()) {
+    throw new Error('query wajib diisi');
+  }
+
+  try {
+    const res = await mem0.search({
+      query: String(query).trim(),
+      userId,
+      limit: parseInt(limit || '25', 10),
+    });
+    const data = (res.results || []).map((m) => normalize(m, userId)).filter(Boolean);
+    return { total: data.length, limit: data.length, data };
+  } catch (error) {
+    logger.error(`[MemoryService] searchMemories error: ${error.message || error}`);
+    throw error;
+  }
+};
+
+/**
  * Cleanup expired memories — scan semua user via /entities,
  * hapus memory yang metadata.expires_at <= sekarang.
  * @returns {Promise<number>} jumlah yang dihapus
@@ -481,6 +549,9 @@ module.exports = {
   updateMemory,
   listMemories,
   deleteMemory,
+  getMemoryById,
+  updateMemoryById,
+  searchMemories,
   cleanupExpired,
   provisionUserProfile,
 };
