@@ -422,9 +422,10 @@ const chatStream = async (req, res) => {
     let systemPrompt = await getSystemPrompt();
 
     // 🔥 Inject user memories ke prompt (jika ada)
+    // Mem0 semantic search — pakai pesan user sebagai query agar relevan
     try {
       const memoryService = require('./memory/memoryService');
-      const memories = await memoryService.getRelevantMemories(userId);
+      const memories = await memoryService.getRelevantMemories(userId, message);
       if (memories && memories.length > 0) {
         const memoryText = memoryService.formatMemoriesForPrompt(memories);
         systemPrompt += memoryText;
