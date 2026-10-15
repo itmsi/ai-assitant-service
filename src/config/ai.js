@@ -16,6 +16,27 @@ module.exports = {
   SUMOPOD_TEMPERATURE: parseFloat(process.env.SUMOPOD_TEMPERATURE || process.env.OPENAI_TEMPERATURE || '0.85'),
   SUMOPOD_MAX_TOKENS: parseInt(process.env.SUMOPOD_MAX_TOKENS || process.env.OPENAI_MAX_TOKENS || '16000'),
 
+  // Voice (Speech-to-Text) Configuration
+  // Provider mengikuti AI_MODEL_PROVIDER (OpenAI / Sumopod OpenAI-compatible)
+  // STT_MODE:
+  //   'whisper' → endpoint /audio/transcriptions (OpenAI whisper-1)
+  //   'chat'    → kirim audio ke chat model multimodal (mis. Gemini) via /chat/completions
+  // Default: 'chat' untuk sumopod (tidak menyediakan /audio/transcriptions), 'whisper' untuk openai
+  STT_MODE: process.env.STT_MODE || (process.env.AI_MODEL_PROVIDER === 'sumopod' ? 'chat' : 'whisper'),
+  STT_MODEL: process.env.STT_MODEL || (
+    (process.env.STT_MODE || (process.env.AI_MODEL_PROVIDER === 'sumopod' ? 'chat' : 'whisper')) === 'chat'
+      ? 'gemini/gemini-3.5-flash'
+      : 'whisper-1'
+  ),
+  STT_MAX_FILE_MB: parseInt(process.env.STT_MAX_FILE_MB || '25', 10), // batas Whisper 25MB
+  STT_DOWNLOAD_TIMEOUT: parseInt(process.env.STT_DOWNLOAD_TIMEOUT || '60000', 10),
+  // Daftar host yang diizinkan (pisah koma). Kosong = semua host publik diizinkan
+  STT_ALLOWED_HOSTS: (process.env.STT_ALLOWED_HOSTS || '').split(',').map((h) => h.trim()).filter(Boolean),
+  // Cache hasil: request yang sama (user + audio_url + parameter) dalam TTL ini dikembalikan dari DB. 0 = nonaktif
+  STT_CACHE_TTL_HOURS: parseFloat(process.env.STT_CACHE_TTL_HOURS || '24'),
+  // Model untuk analisis hasil transkrip (default: model chat provider aktif)
+  STT_ANALYSIS_MODEL: process.env.STT_ANALYSIS_MODEL || '',
+
   // API Gateway Configuration
   API_GATEWAY_BASE_URL: process.env.API_GATEWAY_BASE_URL || '',
   API_GATEWAY_TIMEOUT: parseInt(process.env.API_GATEWAY_TIMEOUT || '30000'),

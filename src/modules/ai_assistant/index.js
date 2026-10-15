@@ -76,6 +76,46 @@ router.post(
 );
 
 /**
+ * @route   POST /api/mosa/ai-assistant/speech-to-text
+ * @desc    Speech-to-text: ubah audio dari URL menjadi teks
+ * @access  Protected (SSO token optional)
+ * @body    {
+ *            audio_url: string,            // wajib, link file audio (mp3/m4a/wav/webm/ogg/flac/mp4)
+ *            language?: string,            // ISO-639-1 (id/en/zh), auto-detect jika kosong
+ *            analyze?: boolean,            // default false (transkrip saja); true = tambah analisis AI
+ *            instruction?: string,         // pertanyaan/instruksi analisis tambahan
+ *            output_language?: string,     // bahasa output; diterjemahkan jika beda dari bahasa terdeteksi
+ *            include_segments?: boolean    // sertakan segmen bertimestamp
+ *          }
+ */
+router.post(
+  '/speech-to-text',
+  optionalSSOToken,
+  handler.speechToText
+);
+
+/**
+ * @route   GET /api/mosa/ai-assistant/speech-to-text/history
+ * @desc    Riwayat speech-to-text milik user
+ * @query   page?, limit? (maks 100)
+ */
+router.get(
+  '/speech-to-text/history',
+  optionalSSOToken,
+  handler.listTranscriptions
+);
+
+/**
+ * @route   GET /api/mosa/ai-assistant/speech-to-text/:id
+ * @desc    Detail satu hasil speech-to-text
+ */
+router.get(
+  '/speech-to-text/:id',
+  optionalSSOToken,
+  handler.getTranscription
+);
+
+/**
  * Memory routes — admin CRUD untuk user memories
  * /api/mosa/ai-assistant/memory
  */
