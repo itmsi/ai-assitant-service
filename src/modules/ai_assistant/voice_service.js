@@ -346,7 +346,52 @@ const analyzeTranscript = async (transcript, { instruction, outputLanguage = 'id
   }
 };
 
+/**
+ * Pipeline lengkap: unduh → transkripsi → (terjemahan jika perlu) → (analisis jika diminta).
+ * Dipakai bersama oleh jalur sinkron (handler) dan worker antrian.
+ * Melempar VoiceError(422) jika tidak ada ucapan.
+ */
+const runPipeline = async ({ audioUrl, language, outputLanguage, analyze, instruction }) => {
+  const audio = await downloadAudio(audioUrl);
+  const transcription = await transcribe(audio, { language });
+
+  if (!transcription.text) {
+    throw new VoiceError('Tidak ada ucapan yang terdeteksi pada audio', 422);
+  }
+
+  // Terjemahkan hanya jika output_language berbeda dari bahasa hasil deteksi
+  const targetLanguage = outputLanguage ? outputLanguage.toLowerCase() : null;
+  const detectedLanguage = transcription.language;
+  const needsTranslation = Boolean(targetLanguage) && targetLanguage !== detectedLanguage;
+
+  let translation = null;
+  if (needsTranslation) {
+    translation = await translateText(transcription.text, {
+      from: detectedLanguage,
+      to: targetLanguage,
+    });
+  }
+
+  let analysis = null;
+  if (analyze === true) {
+    analysis = await analyzeTranscript(translation || transcription.text, {
+      instruction,
+      outputLanguage: targetLanguage || detectedLanguage || 'id',
+    });
+  }
+
+  return {
+    sizeBytes: audio.sizeBytes,
+    transcription,
+    targetLanguage,
+    needsTranslation,
+    translation,
+    analysis,
+  };
+};
+
 module.exports = {
+  runPipeline,
   VoiceError,
   downloadAudio,
   transcribe,

@@ -191,6 +191,11 @@ const aiAssistantSchemas = {
         description: 'Opsional, hanya dipakai jika analyze=true. Pertanyaan/instruksi analisis tambahan, jawabannya di `analysis.custom_answer`',
         example: 'Apakah customer menyetujui penawaran?'
       },
+      async: {
+        type: 'boolean',
+        default: false,
+        description: 'Opsional. true = proses lewat antrian RabbitMQ: langsung dibalas 202 + id dengan status pending, lalu ambil hasilnya lewat GET /speech-to-text/{id}. Butuh RABBITMQ_ENABLED=true. Jika hasil identik sudah ada di cache, tetap dibalas 200 langsung'
+      },
       force_refresh: {
         type: 'boolean',
         default: false,
@@ -242,6 +247,8 @@ const aiAssistantSchemas = {
   AiSpeechToTextResponseData: {
     type: 'object',
     properties: {
+      status: { type: 'string', enum: ['pending', 'processing', 'success', 'failed'], description: 'Status job. Mode sinkron selalu success; mode async mulai dari pending' },
+      error_message: { type: 'string', description: 'Alasan gagal, hanya muncul jika status=failed' },
       id: { type: 'string', format: 'uuid', nullable: true, description: 'ID record di riwayat (dipakai untuk GET /speech-to-text/{id}). null jika gagal disimpan' },
       cached: { type: 'boolean', description: 'true jika hasil diambil dari cache DB, bukan diproses ulang', example: false },
       created_at: { type: 'string', format: 'date-time', description: 'Waktu record dibuat (pada detail/cache hit)' },
@@ -263,6 +270,22 @@ const aiAssistantSchemas = {
       },
       analysis: { $ref: '#/components/schemas/AiSpeechToTextAnalysis' },
       processing_ms: { type: 'integer', example: 3120 }
+    }
+  },
+  AiSpeechToTextQueuedResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Speech to text diterima dan masuk antrian' },
+      data: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          status: { type: 'string', enum: ['pending', 'processing'], example: 'pending' },
+          audio_url: { type: 'string' },
+          queued: { type: 'boolean', example: true }
+        }
+      }
     }
   },
   AiSpeechToTextResponse: {

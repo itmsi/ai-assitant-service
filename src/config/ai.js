@@ -37,6 +37,9 @@ module.exports = {
   STT_ALLOWED_HOSTS: (process.env.STT_ALLOWED_HOSTS || '').split(',').map((h) => h.trim()).filter(Boolean),
   // Cache hasil: request yang sama (user + audio_url + parameter) dalam TTL ini dikembalikan dari DB. 0 = nonaktif
   STT_CACHE_TTL_HOURS: parseFloat(process.env.STT_CACHE_TTL_HOURS || '24'),
+  // Antrian RabbitMQ untuk request async (payload `async: true`). Butuh RABBITMQ_ENABLED=true + RABBITMQ_URL
+  STT_QUEUE_NAME: process.env.STT_QUEUE_NAME || 'ai-speech-to-text',
+  STT_QUEUE_CONCURRENCY: parseInt(process.env.STT_QUEUE_CONCURRENCY || '2', 10), // job diproses bersamaan
   // Model untuk analisis hasil transkrip (default: model chat provider aktif)
   STT_ANALYSIS_MODEL: process.env.STT_ANALYSIS_MODEL || '',
 

@@ -48,7 +48,11 @@ const toRecord = (row) => (row ? {
   duration: row.duration,
   stt_model: row.stt_model,
   processing_ms: row.processing_ms,
+  status: row.status,
+  error_message: row.error_message,
+  params: parseJson(row.params),
   created_at: row.created_at,
+  finished_at: row.finished_at,
 } : null);
 
 /**
@@ -89,7 +93,7 @@ const findCached = async (requestHash, ttlHours) => {
   try {
     const since = new Date(Date.now() - ttlHours * 60 * 60 * 1000);
     const row = await db('ai_transcriptions')
-      .where({ request_hash: requestHash })
+      .where({ request_hash: requestHash, status: 'success' })
       .andWhere('created_at', '>=', since)
       .orderBy('created_at', 'desc')
       .first();
@@ -122,7 +126,7 @@ const listByUser = async (userId, { page = 1, limit = 20 } = {}) => {
     .limit(limit)
     .offset(offset)
     .select(
-      'id', 'audio_url', 'size_bytes', 'language', 'output_language', 'translated',
+      'id', 'status', 'audio_url', 'size_bytes', 'language', 'output_language', 'translated',
       'duration', 'processing_ms', 'created_at',
       db.raw('LEFT(transcript, 150) AS transcript_preview'),
     );
@@ -130,7 +134,96 @@ const listByUser = async (userId, { page = 1, limit = 20 } = {}) => {
   return { total: Number(count), page, limit, items: rows };
 };
 
+/**
+ * Buat job antrian (status pending). Hasil diisi worker lewat markDone.
+ */
+const createPending = async ({ userId, audioUrl, requestHash, params }) => {
+  const [row] = await db('ai_transcriptions')
+    .insert({
+      user_id: userId || null,
+      audio_url: audioUrl,
+      request_hash: requestHash,
+      status: 'pending',
+      params: JSON.stringify(params),
+      transcript: null,
+    })
+    .returning('*');
+  return toRecord(row);
+};
+
+/**
+ * Job yang sama (request identik) yang masih menunggu/diproses — dipakai agar retry client tidak menggandakan job
+ */
+const findActive = async (requestHash, withinMinutes = 60) => {
+  try {
+    const since = new Date(Date.now() - withinMinutes * 60 * 1000);
+    const row = await db('ai_transcriptions')
+      .where({ request_hash: requestHash })
+      .whereIn('status', ['pending', 'processing'])
+      .andWhere('created_at', '>=', since)
+      .orderBy('created_at', 'desc')
+      .first();
+    return toRecord(row);
+  } catch (error) {
+    logger.error(`Error finding active transcription: ${error.message || error}`);
+    return null;
+  }
+};
+
+/**
+ * Ambil job untuk dikerjakan worker. pending/processing boleh (processing = redelivery setelah worker crash);
+ * success/failed berarti sudah selesai → null (pesan duplikat diabaikan).
+ */
+const claimForProcessing = async (id) => {
+  const [row] = await db('ai_transcriptions')
+    .where({ id })
+    .whereIn('status', ['pending', 'processing'])
+    .update({ status: 'processing', started_at: db.fn.now() })
+    .returning('*');
+  return toRecord(row);
+};
+
+const markDone = async (id, data) => {
+  await db('ai_transcriptions')
+    .where({ id })
+    .update({
+      status: 'success',
+      error_message: null,
+      size_bytes: data.sizeBytes ?? null,
+      language: data.language || null,
+      output_language: data.outputLanguage || null,
+      translated: Boolean(data.translated),
+      transcript: data.transcript,
+      translation: data.translation || null,
+      segments: JSON.stringify(data.segments || []),
+      analysis: data.analysis ? JSON.stringify(data.analysis) : null,
+      duration: data.duration ?? null,
+      stt_model: data.sttModel || null,
+      processing_ms: data.processingMs ?? null,
+      finished_at: db.fn.now(),
+    });
+};
+
+const markFailed = async (id, message) => {
+  try {
+    await db('ai_transcriptions')
+      .where({ id })
+      .update({
+        status: 'failed',
+        error_message: String(message || 'Unknown error').slice(0, 1000),
+        finished_at: db.fn.now(),
+      });
+  } catch (error) {
+    logger.error(`Error marking transcription failed: ${error.message || error}`);
+  }
+};
+
 module.exports = {
+  createPending,
+  findActive,
+  claimForProcessing,
+  markDone,
+  markFailed,
   buildRequestHash,
   saveTranscription,
   findCached,

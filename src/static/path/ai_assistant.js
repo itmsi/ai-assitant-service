@@ -270,6 +270,14 @@ const aiAssistantPaths = {
                   output_language: 'id'
                 }
               },
+              asyncQueue: {
+                summary: 'Lewat antrian RabbitMQ (balas 202 + id, ambil hasil via GET /speech-to-text/{id})',
+                value: {
+                  audio_url: 'https://cloud.motorsights.com/s/AmjNdn8gmC7t96t',
+                  output_language: 'en',
+                  async: true
+                }
+              },
               withTranslation: {
                 summary: 'Terjemahkan ke bahasa lain (bahasa audio dideteksi otomatis)',
                 value: {
@@ -298,6 +306,23 @@ const aiAssistantPaths = {
         }
       },
       responses: {
+        202: {
+          description: 'Mode async: job diterima dan masuk antrian RabbitMQ. Ambil hasil lewat GET /ai-assistant/speech-to-text/{id} sampai status=success atau failed',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiSpeechToTextQueuedResponse' },
+              example: {
+                success: true,
+                message: 'Speech to text diterima dan masuk antrian',
+                data: { id: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d', status: 'pending', audio_url: 'https://cloud.motorsights.com/s/AmjNdn8gmC7t96t', queued: true }
+              }
+            }
+          }
+        },
+        503: {
+          description: 'Mode async diminta tetapi RabbitMQ tidak aktif / tidak terjangkau',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
         200: {
           description: 'Audio berhasil diubah menjadi teks',
           content: {
