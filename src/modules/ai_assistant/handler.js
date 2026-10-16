@@ -758,7 +758,10 @@ const speechToText = async (req, res) => {
       });
 
       try {
-        await sttListener.publishSttJob(job.id);
+        await sttListener.publishSttJob(
+          job.id,
+          req.authToken || (req.headers?.authorization || '').replace(/^Bearers+/i, '') || null,
+        );
       } catch (queueError) {
         logger.error(`[STT] Gagal publish ke RabbitMQ: ${queueError.message || queueError}`);
         await transcriptionRepo.markFailed(job.id, `Gagal masuk antrian: ${queueError.message}`);
