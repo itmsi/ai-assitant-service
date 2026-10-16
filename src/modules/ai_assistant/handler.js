@@ -13,6 +13,7 @@ const { getToolsForLangChain, executeTool } = require('./tools');
 const aiConfig = require('../../config/ai');
 const voiceService = require('./voice_service');
 const transcriptionRepo = require('./ai_transcriptions_repository');
+const sttListener = require('../../listeners/stt_listener');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -639,6 +640,8 @@ const chatStream = async (req, res) => {
  */
 const formatTranscription = (record, includeSegments) => ({
   id: record.id,
+  status: record.status,
+  error_message: record.error_message || undefined,
   audio_url: record.audio_url,
   size_bytes: record.size_bytes,
   language: record.language,
@@ -650,6 +653,7 @@ const formatTranscription = (record, includeSegments) => ({
   segments: includeSegments ? record.segments : undefined,
   analysis: record.analysis,
   created_at: record.created_at,
+  finished_at: record.finished_at,
 });
 
 /**
@@ -664,6 +668,7 @@ const speechToText = async (req, res) => {
     instruction,
     output_language: outputLanguage,
     include_segments: includeSegments = false,
+    async: runAsync = false,
   } = req.body || {};
 
   if (!audioUrl || typeof audioUrl !== 'string') {
@@ -721,36 +726,61 @@ const speechToText = async (req, res) => {
       }
     }
 
-    const audio = await voiceService.downloadAudio(audioUrl);
-    const transcription = await voiceService.transcribe(audio, { language });
+    // Mode antrian: simpan job pending, kirim ke RabbitMQ, balas 202 (hasil diambil lewat GET /speech-to-text/:id)
+    if (runAsync === true) {
+      if (!sttListener.isQueueEnabled()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Mode async tidak tersedia: RabbitMQ belum diaktifkan (RABBITMQ_ENABLED / RABBITMQ_URL)',
+        });
+      }
 
-    if (!transcription.text) {
-      return baseResponseGeneral(res.status(422), {
-        success: false,
-        message: 'Tidak ada ucapan yang terdeteksi pada audio',
+      // Request identik yang masih antri/diproses dipakai ulang, agar retry client tidak menggandakan job
+      const active = await transcriptionRepo.findActive(requestHash);
+      if (active) {
+        return res.status(202).json({
+          success: true,
+          message: 'Speech to text sudah dalam antrian',
+          data: { id: active.id, status: active.status, audio_url: audioUrl, queued: true },
+        });
+      }
+
+      const job = await transcriptionRepo.createPending({
+        userId,
+        audioUrl,
+        requestHash,
+        params: {
+          language: language || null,
+          output_language: outputLanguage || null,
+          analyze: analyze === true,
+          instruction: instruction || null,
+        },
+      });
+
+      try {
+        await sttListener.publishSttJob(job.id);
+      } catch (queueError) {
+        logger.error(`[STT] Gagal publish ke RabbitMQ: ${queueError.message || queueError}`);
+        await transcriptionRepo.markFailed(job.id, `Gagal masuk antrian: ${queueError.message}`);
+        return res.status(503).json({
+          success: false,
+          message: 'Gagal memasukkan ke antrian RabbitMQ',
+        });
+      }
+
+      return res.status(202).json({
+        success: true,
+        message: 'Speech to text diterima dan masuk antrian',
+        data: { id: job.id, status: 'pending', audio_url: audioUrl, queued: true },
       });
     }
 
-    // Terjemahkan hanya jika output_language berbeda dari bahasa hasil deteksi
-    const targetLanguage = outputLanguage ? outputLanguage.toLowerCase() : null;
-    const detectedLanguage = transcription.language;
-    const needsTranslation = Boolean(targetLanguage) && targetLanguage !== detectedLanguage;
-
-    let translation = null;
-    if (needsTranslation) {
-      translation = await voiceService.translateText(transcription.text, {
-        from: detectedLanguage,
-        to: targetLanguage,
-      });
-    }
-
-    let analysis = null;
-    if (analyze === true) {
-      analysis = await voiceService.analyzeTranscript(translation || transcription.text, {
-        instruction,
-        outputLanguage: targetLanguage || detectedLanguage || 'id',
-      });
-    }
+    const {
+      sizeBytes, transcription, targetLanguage, needsTranslation, translation, analysis,
+    } = await voiceService.runPipeline({
+      audioUrl, language, outputLanguage, analyze, instruction,
+    });
+    const audio = { sizeBytes };
 
     const processingMs = Date.now() - startedAt;
 
