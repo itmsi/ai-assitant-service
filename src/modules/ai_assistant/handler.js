@@ -11,6 +11,8 @@ const { getConversation, saveConversation } = require('../../utils/redis');
 const conversationRepo = require('./ai_conversations_repository');
 const { getToolsForLangChain, executeTool } = require('./tools');
 const aiConfig = require('../../config/ai');
+const voiceService = require('./voice_service');
+const transcriptionRepo = require('./ai_transcriptions_repository');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -632,7 +634,246 @@ const chatStream = async (req, res) => {
   }
 };
 
+/**
+ * Bentuk response dari record DB (dipakai untuk cache hit dan detail)
+ */
+const formatTranscription = (record, includeSegments) => ({
+  id: record.id,
+  audio_url: record.audio_url,
+  size_bytes: record.size_bytes,
+  language: record.language,
+  duration: record.duration,
+  transcript: record.transcript,
+  output_language: record.output_language,
+  translated: record.translated,
+  translation: record.translation,
+  segments: includeSegments ? record.segments : undefined,
+  analysis: record.analysis,
+  created_at: record.created_at,
+});
+
+/**
+ * Speech-to-text — ubah audio dari URL menjadi teks (analisis AI opsional)
+ * Body: { audio_url, language?, analyze?, instruction?, output_language?, include_segments?, force_refresh? }
+ */
+const speechToText = async (req, res) => {
+  const {
+    audio_url: audioUrl,
+    language,
+    analyze = false,
+    instruction,
+    output_language: outputLanguage,
+    include_segments: includeSegments = false,
+  } = req.body || {};
+
+  if (!audioUrl || typeof audioUrl !== 'string') {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'audio_url wajib diisi',
+    });
+  }
+  if (language && !/^[a-z]{2}$/i.test(language)) {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+  if (outputLanguage && !/^[a-z]{2}$/i.test(outputLanguage)) {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+  if (instruction && (typeof instruction !== 'string' || instruction.length > 1000)) {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'instruction harus string maksimal 1000 karakter',
+    });
+  }
+
+  const userId = req.body?.employee_id || req.body?.userId || getUserId(req);
+  const forceRefresh = req.body?.force_refresh === true;
+  const startedAt = Date.now();
+  try {
+    // Cache: request identik (user + audio + parameter) dalam TTL dikembalikan dari DB
+    const requestHash = transcriptionRepo.buildRequestHash({
+      userId,
+      audioUrl,
+      language,
+      outputLanguage,
+      analyze,
+      instruction,
+    });
+
+    if (aiConfig.STT_CACHE_TTL_HOURS > 0 && !forceRefresh) {
+      const cached = await transcriptionRepo.findCached(requestHash, aiConfig.STT_CACHE_TTL_HOURS);
+      if (cached) {
+        logger.info(`[STT] Cache hit: ${cached.id}`);
+        return baseResponseGeneral(res, {
+          success: true,
+          message: 'Speech to text berhasil diproses (dari cache)',
+          data: {
+            ...formatTranscription(cached, includeSegments),
+            cached: true,
+            processing_ms: Date.now() - startedAt,
+          },
+        });
+      }
+    }
+
+    const audio = await voiceService.downloadAudio(audioUrl);
+    const transcription = await voiceService.transcribe(audio, { language });
+
+    if (!transcription.text) {
+      return baseResponseGeneral(res.status(422), {
+        success: false,
+        message: 'Tidak ada ucapan yang terdeteksi pada audio',
+      });
+    }
+
+    // Terjemahkan hanya jika output_language berbeda dari bahasa hasil deteksi
+    const targetLanguage = outputLanguage ? outputLanguage.toLowerCase() : null;
+    const detectedLanguage = transcription.language;
+    const needsTranslation = Boolean(targetLanguage) && targetLanguage !== detectedLanguage;
+
+    let translation = null;
+    if (needsTranslation) {
+      translation = await voiceService.translateText(transcription.text, {
+        from: detectedLanguage,
+        to: targetLanguage,
+      });
+    }
+
+    let analysis = null;
+    if (analyze === true) {
+      analysis = await voiceService.analyzeTranscript(translation || transcription.text, {
+        instruction,
+        outputLanguage: targetLanguage || detectedLanguage || 'id',
+      });
+    }
+
+    const processingMs = Date.now() - startedAt;
+
+    // Simpan ke DB (gagal simpan tidak menggagalkan response)
+    const saved = await transcriptionRepo.saveTranscription({
+      userId,
+      audioUrl,
+      sizeBytes: audio.sizeBytes,
+      requestHash,
+      language: transcription.language,
+      outputLanguage: targetLanguage,
+      translated: needsTranslation,
+      transcript: transcription.text,
+      translation,
+      segments: transcription.segments,
+      analysis,
+      duration: transcription.duration,
+      sttModel: aiConfig.STT_MODEL,
+      processingMs,
+    });
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Speech to text berhasil diproses',
+      data: {
+        id: saved ? saved.id : null,
+        audio_url: audioUrl,
+        size_bytes: audio.sizeBytes,
+        language: transcription.language,
+        duration: transcription.duration,
+        transcript: transcription.text,
+        output_language: targetLanguage,
+        translated: needsTranslation,
+        translation,
+        segments: includeSegments ? transcription.segments : undefined,
+        analysis,
+        cached: false,
+        processing_ms: processingMs,
+      },
+    });
+  } catch (error) {
+    const status = error instanceof voiceService.VoiceError ? error.status : (error.status || 500);
+    logger.error(`Error in speechToText handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(status), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengubah suara menjadi teks',
+    });
+  }
+};
+
+/**
+ * Riwayat speech-to-text milik user
+ * Query: page?, limit? (maks 100), user_id? (fallback jika tanpa token)
+ */
+const listTranscriptions = async (req, res) => {
+  try {
+    const userId = getUserId(req) || req.query?.user_id;
+    if (!userId) {
+      return baseResponseGeneral(res.status(401), {
+        success: false,
+        message: 'User tidak terautentikasi — token tidak valid atau tidak ada',
+      });
+    }
+
+    const page = Math.max(parseInt(req.query?.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 20, 1), 100);
+    const result = await transcriptionRepo.listByUser(userId, { page, limit });
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Riwayat speech to text berhasil diambil',
+      data: result,
+    });
+  } catch (error) {
+    logger.error(`Error in listTranscriptions handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengambil riwayat speech to text',
+    });
+  }
+};
+
+/**
+ * Detail satu hasil speech-to-text
+ */
+const getTranscription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return baseResponseGeneral(res.status(400), {
+        success: false,
+        message: 'ID tidak valid',
+      });
+    }
+
+    const record = await transcriptionRepo.getById(id);
+    const userId = getUserId(req) || req.query?.user_id;
+    // Record milik user lain diperlakukan sama seperti tidak ditemukan
+    if (!record || (record.user_id && record.user_id !== String(userId))) {
+      return baseResponseGeneral(res.status(404), {
+        success: false,
+        message: 'Data speech to text tidak ditemukan',
+      });
+    }
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Detail speech to text berhasil diambil',
+      data: formatTranscription(record, true),
+    });
+  } catch (error) {
+    logger.error(`Error in getTranscription handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengambil data speech to text',
+    });
+  }
+};
+
 module.exports = {
+  speechToText,
+  listTranscriptions,
+  getTranscription,
   chat,
   getHistory,
   clearHistory,
