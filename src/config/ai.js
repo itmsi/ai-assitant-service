@@ -5,6 +5,8 @@ module.exports = {
   
   // OpenAI Configuration
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+  // Key OpenAI khusus speech-to-text (Whisper), terpisah dari OPENAI_API_KEY agar tidak memengaruhi provider chat
+  OPENAI_STT_API_KEY: process.env.OPENAI_STT_API_KEY || '',
   OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o',
   OPENAI_TEMPERATURE: parseFloat(process.env.OPENAI_TEMPERATURE || '0.85'),
   OPENAI_MAX_TOKENS: parseInt(process.env.OPENAI_MAX_TOKENS || ''),
@@ -17,17 +19,18 @@ module.exports = {
   SUMOPOD_MAX_TOKENS: parseInt(process.env.SUMOPOD_MAX_TOKENS || process.env.OPENAI_MAX_TOKENS || '16000'),
 
   // Voice (Speech-to-Text) Configuration
-  // Provider mengikuti AI_MODEL_PROVIDER (OpenAI / Sumopod OpenAI-compatible)
   // STT_MODE:
-  //   'whisper' → endpoint /audio/transcriptions (OpenAI whisper-1)
-  //   'chat'    → kirim audio ke chat model multimodal (mis. Gemini) via /chat/completions
-  // Default: 'chat' untuk sumopod (tidak menyediakan /audio/transcriptions), 'whisper' untuk openai
-  STT_MODE: process.env.STT_MODE || (process.env.AI_MODEL_PROVIDER === 'sumopod' ? 'chat' : 'whisper'),
+  //   'whisper' → OpenAI /audio/transcriptions (whisper-1), selalu lewat OpenAI langsung memakai OPENAI_STT_API_KEY
+  //   'chat'    → kirim audio ke chat model multimodal (mis. Gemini) via provider chat (Sumopod) /chat/completions
+  // Default: 'whisper' jika OPENAI_STT_API_KEY terisi, selain itu 'chat'
+  STT_MODE: process.env.STT_MODE || (process.env.OPENAI_STT_API_KEY ? 'whisper' : 'chat'),
   STT_MODEL: process.env.STT_MODEL || (
-    (process.env.STT_MODE || (process.env.AI_MODEL_PROVIDER === 'sumopod' ? 'chat' : 'whisper')) === 'chat'
+    (process.env.STT_MODE || (process.env.OPENAI_STT_API_KEY ? 'whisper' : 'chat')) === 'chat'
       ? 'gemini/gemini-3.5-flash'
       : 'whisper-1'
   ),
+  // Base URL OpenAI khusus STT whisper (ubah jika memakai proxy/Azure)
+  STT_OPENAI_BASE_URL: process.env.STT_OPENAI_BASE_URL || 'https://api.openai.com/v1',
   STT_MAX_FILE_MB: parseInt(process.env.STT_MAX_FILE_MB || '25', 10), // batas Whisper 25MB
   STT_DOWNLOAD_TIMEOUT: parseInt(process.env.STT_DOWNLOAD_TIMEOUT || '60000', 10),
   // Daftar host yang diizinkan (pisah koma). Kosong = semua host publik diizinkan

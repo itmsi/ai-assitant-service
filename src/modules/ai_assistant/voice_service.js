@@ -238,7 +238,15 @@ const transcribe = async ({ buffer, filename }, { language, prompt } = {}) => {
     return transcribeViaChat({ buffer, filename }, { language });
   }
 
-  const { openai } = getClient();
+  // Whisper selalu lewat OpenAI langsung (Sumopod tidak punya /audio/transcriptions),
+  // terlepas dari provider chat/analisis yang aktif
+  if (!aiConfig.OPENAI_STT_API_KEY) {
+    throw new VoiceError('OPENAI_STT_API_KEY belum diisi (dibutuhkan untuk STT_MODE=whisper)', 500);
+  }
+  const openai = new OpenAI({
+    apiKey: aiConfig.OPENAI_STT_API_KEY,
+    baseURL: aiConfig.STT_OPENAI_BASE_URL,
+  });
   const file = await OpenAI.toFile(buffer, filename);
 
   const params = {
