@@ -60,6 +60,9 @@ module.exports = {
   MICROSERVICE_HR_URL: process.env.MICROSERVICE_HR_URL || 'http://localhost:3001',
   MICROSERVICE_QUOTATION_URL: process.env.MICROSERVICE_QUOTATION_URL || 'http://localhost:3002',
   MICROSERVICE_ECATALOG_URL: process.env.MICROSERVICE_ECATALOG_URL || 'http://localhost:3003',
+  // api-career langsung (tanpa gateway), dipakai untuk update hasil speech-to-text. Contoh: http://api-career:9585
+  // Kosong = update ke api-career dinonaktifkan
+  MICROSERVICE_CAREER_URL: process.env.MICROSERVICE_CAREER_URL || '',
   
   // System Prompt - sekarang diambil dari database (ai_prompts table)
   // Fallback ke environment variable jika database tidak tersedia
