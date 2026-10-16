@@ -9,7 +9,7 @@ const UPDATE_TIMEOUT = 15000;
 const UPDATE_RETRIES = 3;
 
 const getUpdateUrl = () => {
-  const base = (aiConfig.API_GATEWAY_BASE_URL || '').replace(/\/$/, '');
+  const base = (aiConfig.MICROSERVICE_CAREER_URL || '').replace(/\/$/, '');
   return base ? `${base}${UPDATE_PATH}` : '';
 };
 
