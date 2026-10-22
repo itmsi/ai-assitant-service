@@ -500,6 +500,86 @@ const aiAssistantPaths = {
       }
     }
   },
+  '/ai-assistant/summarize': {
+    post: {
+      tags: ['AI Assistant'],
+      summary: 'Ringkas teks/transkrip dengan perintah bebas',
+      description: 'Untuk HRD yang ingin membuat ringkasan sendiri dari UI MSI, di luar applicant form. **Jalur utama: kirim `transcription_id` dari hasil speech-to-text yang sudah ada**, dan opsional `instruction` berisi perintah bebas. Hasilnya disimpan ke kolom `summary_update` beserta ID dan nama pembuat dari token login (menimpa isi sebelumnya). Alternatif: kirim `text` langsung, tetapi hasilnya hanya dikembalikan dan tidak disimpan. Wajib token SSO. Jawaban hanya berdasarkan isi transkrip; isi transkrip diperlakukan sebagai data, bukan perintah.',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/AiSummarizeRequest' },
+            examples: {
+              fromTranscription: {
+                summary: 'UTAMA - dari hasil speech-to-text yang sudah ada, dengan perintah HRD',
+                value: {
+                  transcription_id: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d',
+                  instruction: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin',
+                  output_language: 'id'
+                }
+              },
+              fromTranscriptionGeneral: {
+                summary: 'Dari hasil speech-to-text, ringkasan umum (tanpa perintah)',
+                value: {
+                  transcription_id: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d'
+                }
+              },
+              fromText: {
+                summary: 'Alternatif - kirim teks langsung (tidak disimpan)',
+                value: {
+                  text: 'Halo, perkenalkan nama saya Adam, saya lulusan baru dari Universitas Jayabaya...',
+                  instruction: 'Apakah kandidat menyebut pengalaman kerja sebelumnya?'
+                }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Ringkasan berhasil dibuat',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiSummarizeResponse' },
+              example: {
+                success: true,
+                message: 'Ringkasan berhasil dibuat',
+                data: {
+                  summary: 'Adam memperkenalkan diri sebagai lulusan baru Universitas Jayabaya yang kini berkarier sebagai management trainee di bidang sales.',
+                  saved: true,
+                  summary_updated_by_id: 'f0b57258-5f33-4e03-81f7-cd70d833b5c5',
+                  summary_updated_by_name: 'Rina HRD',
+                  output_language: 'id',
+                  source: 'transcription',
+                  transcription_id: null,
+                  input_chars: 540,
+                  processing_ms: 2100
+                }
+              }
+            }
+          }
+        },
+        400: {
+          description: 'Validasi gagal (text/transcription_id kosong atau keduanya diisi, teks > 50.000 karakter, instruction > 2.000 karakter, output_language tidak valid)',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
+        401: {
+          description: 'Token SSO tidak ada atau tidak valid',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
+        404: {
+          description: 'transcription_id tidak ditemukan atau belum selesai (status bukan success)',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
+        500: {
+          description: 'Terjadi kesalahan saat membuat ringkasan',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        }
+      }
+    }
+  },
   '/ai-assistant/speech-to-text/history': {
     get: {
       tags: ['AI Assistant'],

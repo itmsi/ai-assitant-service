@@ -49,6 +49,9 @@ const toRecord = (row) => (row ? {
   translation: row.translation,
   segments: parseJson(row.segments) || [],
   summary: row.summary,
+  summary_update: row.summary_update,
+  summary_updated_by_id: row.summary_updated_by_id,
+  summary_updated_by_name: row.summary_updated_by_name,
   analysis: parseJson(row.analysis),
   duration: row.duration,
   stt_model: row.stt_model,
@@ -211,6 +214,26 @@ const markDone = async (id, data) => {
     });
 };
 
+/**
+ * Simpan ringkasan hasil perintah HRD beserta identitas pembuatnya (dari token login MSI)
+ */
+const saveSummaryUpdate = async (id, { summary, updatedById, updatedByName }) => {
+  try {
+    const [row] = await db('ai_transcriptions')
+      .where({ id })
+      .update({
+        summary_update: summary,
+        summary_updated_by_id: updatedById || null,
+        summary_updated_by_name: updatedByName || null,
+      })
+      .returning('*');
+    return toRecord(row);
+  } catch (error) {
+    logger.error(`Error saving summary update: ${error.message || error}`);
+    return null;
+  }
+};
+
 const markFailed = async (id, message) => {
   try {
     await db('ai_transcriptions')
@@ -231,6 +254,7 @@ module.exports = {
   claimForProcessing,
   markDone,
   markFailed,
+  saveSummaryUpdate,
   buildRequestHash,
   saveTranscription,
   findCached,

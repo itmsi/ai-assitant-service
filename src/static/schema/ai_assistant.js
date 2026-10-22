@@ -273,6 +273,14 @@ const aiAssistantSchemas = {
         description: 'Hanya muncul jika include_segments=true',
         items: { $ref: '#/components/schemas/AiSpeechToTextSegment' }
       },
+      summary_update: {
+        type: 'string',
+        nullable: true,
+        description: 'Ringkasan hasil perintah HRD lewat POST /ai-assistant/summarize (transcription_id). Terpisah dari summary',
+        example: 'Kelebihan: pengalaman management trainee di bidang sales.'
+      },
+      summary_updated_by_id: { type: 'string', nullable: true, description: 'ID pengguna (dari token login MSI) yang terakhir membuat summary_update' },
+      summary_updated_by_name: { type: 'string', nullable: true, description: 'Nama pengguna yang terakhir membuat summary_update' },
       summary: {
         type: 'string',
         nullable: true,
@@ -281,6 +289,61 @@ const aiAssistantSchemas = {
       },
       analysis: { $ref: '#/components/schemas/AiSpeechToTextAnalysis' },
       processing_ms: { type: 'integer', example: 3120 }
+    }
+  },
+  AiSummarizeRequest: {
+    type: 'object',
+    description: 'Jalur utama: transcription_id dari hasil speech-to-text yang sudah ada. text hanya alternatif jika tidak punya transcription_id. Isi salah satu, bukan keduanya',
+    properties: {
+      transcription_id: {
+        type: 'string',
+        format: 'uuid',
+        description: 'UTAMA. ID hasil speech-to-text yang sudah ada (status harus success; didapat dari respons speech-to-text atau GET /speech-to-text/history). Yang diringkas terjemahannya jika ada, jika tidak transkrip aslinya. Hasil ringkasan disimpan ke kolom summary_update beserta ID dan nama pembuat dari token login',
+        example: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d'
+      },
+      instruction: {
+        type: 'string',
+        maxLength: 2000,
+        description: 'Opsional. Perintah bebas dari HRD. Jika kosong, hasilnya ringkasan umum 2-4 kalimat. Jika diisi, jawaban mengikuti perintah dan hanya berdasarkan isi transkrip',
+        example: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'
+      },
+      output_language: {
+        type: 'string',
+        default: 'id',
+        description: 'Kode bahasa ISO-639-1 untuk hasil (id, en, zh)'
+      },
+      text: {
+        type: 'string',
+        maxLength: 50000,
+        description: 'ALTERNATIF. Teks yang akan diringkas langsung, dipakai jika tidak punya transcription_id. Hasilnya hanya dikembalikan dan TIDAK disimpan',
+        example: 'Halo, perkenalkan nama saya Adam, saya lulusan baru dari Universitas Jayabaya...'
+      }
+    },
+    example: {
+      transcription_id: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d',
+      instruction: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin',
+      output_language: 'id'
+    }
+  },
+  AiSummarizeResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Ringkasan berhasil dibuat' },
+      data: {
+        type: 'object',
+        properties: {
+          saved: { type: 'boolean', description: 'true jika hasil tersimpan ke summary_update. Hanya mungkin saat memakai transcription_id; false jika memakai text, atau penyimpanan gagal' },
+          summary_updated_by_id: { type: 'string', nullable: true, example: 'f0b57258-5f33-4e03-81f7-cd70d833b5c5' },
+          summary_updated_by_name: { type: 'string', nullable: true, example: 'Rina HRD' },
+          summary: { type: 'string', description: 'Hasil ringkasan/jawaban. Bisa berisi format markdown (mis. **tebal**, poin) jika perintah HRD meminta daftar' },
+          output_language: { type: 'string', example: 'id' },
+          source: { type: 'string', enum: ['text', 'transcription'] },
+          transcription_id: { type: 'string', format: 'uuid', nullable: true },
+          input_chars: { type: 'integer', example: 540 },
+          processing_ms: { type: 'integer', example: 2100 }
+        }
+      }
     }
   },
   AiSpeechToTextQueuedResponse: {
