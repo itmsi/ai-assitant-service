@@ -504,8 +504,12 @@ const runPipeline = async ({
     analyze === true
       ? analyzeTranscript(sourceText, { instruction, outputLanguage: resultLanguage })
       : null,
+    // Ringkasan bersifat tambahan: jika gagal, transkrip tetap dikembalikan tanpa ringkasan
     summarize === true
-      ? summarizeText(sourceText, { outputLanguage: resultLanguage })
+      ? summarizeText(sourceText, { outputLanguage: resultLanguage }).catch((error) => {
+        logger.warn(`[Voice] Ringkasan gagal dibuat, dilewati: ${error.message || error}`);
+        return null;
+      })
       : null,
   ]);
 

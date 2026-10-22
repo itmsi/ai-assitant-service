@@ -37,40 +37,50 @@ const buildPayload = (job, outcome) => {
     transcription_id: job.id,
     // Jika output_language diminta dan berbeda dari bahasa audio, yang dikirim adalah hasil terjemahannya
     speech_text: outcome.translation || outcome.transcript,
+    // Hanya dikirim jika summarize=true; tanpa itu tidak ada ringkasan lama di penerima yang tertimpa
+    ...(outcome.summary ? { summary: outcome.summary } : {}),
     status_speech_text: 'Success',
     message_speech_text: 'Transcribe berhasil',
   };
 };
 
 /**
+ * Body untuk ringkasan hasil perintah HRD (POST /ai-assistant/summarize). Hanya berisi summary_update;
+ * file_link_audio wajib karena penerima mencocokkan baris berdasarkan link audio.
+ */
+const buildSummaryPayload = (record, summary) => ({
+  file_link_audio: record.audio_url,
+  transcription_id: record.id,
+  summary_update: summary,
+});
+
+/**
  * Kirim hasil job ke api-career (POST /applicant_form_contents/update-stt). Tidak pernah melempar error:
  * kegagalan update ke api-career tidak boleh mengubah status job yang sudah selesai.
  * Penerima membalas HTTP 201 + {status:false} saat token salah, jadi keberhasilan dicek dari body.success.
  */
-const updateSttResult = async (job, outcome, token) => {
+const postToCareer = async (payload, token, { label, attempts = UPDATE_RETRIES, timeout = UPDATE_TIMEOUT } = {}) => {
   if (!isUpdateEnabled()) return false;
   if (!token) {
-    logger.warn(`[STT Update] Job ${job.id} dilewati: request async tidak membawa token SSO`);
+    logger.warn(`[STT Update] ${label} dilewati: request tidak membawa token SSO`);
     return false;
   }
 
   const url = getUpdateUrl();
-  const payload = buildPayload(job, outcome);
   const headers = { 'Content-Type': 'application/json' };
   // Token SSO milik request asal (sama dengan yang dipakai project), diteruskan apa adanya
   headers.Authorization = `Bearer ${token}`;
 
-  const attempts = UPDATE_RETRIES;
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const response = await axios.post(url, payload, {
         headers,
-        timeout: UPDATE_TIMEOUT,
+        timeout,
         validateStatus: () => true,
       });
       if (response.status >= 200 && response.status < 300 && response.data?.success === true) {
-        logger.info(`[STT Update] Job ${job.id} terkirim (${payload.status_speech_text}), percobaan ${attempt}`);
+        logger.info(`[STT Update] ${label} terkirim, percobaan ${attempt}`);
         return true;
       }
       lastError = `HTTP ${response.status} ${String(response.data?.message || '').slice(0, 200)}`;
@@ -83,13 +93,29 @@ const updateSttResult = async (job, outcome, token) => {
     if (attempt < attempts) await wait(1000 * 2 ** (attempt - 1));
   }
 
-  logger.error(`[STT Update] Job ${job.id} GAGAL terkirim ke ${url}: ${lastError}`);
+  logger.error(`[STT Update] ${label} GAGAL terkirim ke ${url}: ${lastError}`);
   return false;
 };
+
+// Hasil job speech-to-text (dipanggil worker setelah selesai atau gagal)
+const updateSttResult = (job, outcome, token) => postToCareer(
+  buildPayload(job, outcome),
+  token,
+  { label: `Job ${job.id}` },
+);
+
+// Ringkasan HRD (dipanggil request interaktif, jadi percobaan dan timeout dibuat singkat)
+const updateSummaryResult = (record, summary, token) => postToCareer(
+  buildSummaryPayload(record, summary),
+  token,
+  { label: `Summary ${record.id}`, attempts: 2, timeout: 10000 },
+);
 
 module.exports = {
   isUpdateEnabled,
   getUpdateUrl,
   buildPayload,
+  buildSummaryPayload,
   updateSttResult,
+  updateSummaryResult,
 };

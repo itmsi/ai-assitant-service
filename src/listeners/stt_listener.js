@@ -69,6 +69,7 @@ const processJob = async (id, token = null) => {
     await careerSttUpdate.updateSttResult(job, {
       transcript: result.transcription.text,
       translation: result.translation,
+      summary: result.summary,
     }, token)
   } catch (error) {
     logger.error(`[STT Worker] Job ${id} gagal: ${error.message || error}`)
