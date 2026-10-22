@@ -184,6 +184,15 @@ const normalizeLanguage = (value) => {
   return /^[a-z]{2}$/.test(base) ? base : null;
 };
 
+// Nama bahasa (Inggris) dari kode ISO-639-1, mis. "en" → "English". Model lebih patuh pada nama bahasa daripada kode
+const languageName = (code) => {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) || code;
+  } catch {
+    return code;
+  }
+};
+
 const getClient = () => {
   const config = getProviderConfig();
   return {
@@ -195,11 +204,8 @@ const getClient = () => {
 /**
  * Speech-to-text via OpenAI-compatible /audio/transcriptions
  */
-const transcribeViaChat = async ({ buffer, filename }, { language } = {}) => {
-  const { openai } = getClient();
-  const ext = path.extname(filename).replace('.', '').toLowerCase();
-
-  const instruction = [
+const buildTranscribePrompt = (language) => {
+  return [
     'Transkripkan SELURUH ucapan pada audio ini persis apa adanya (verbatim), sesuai bahasa yang diucapkan.',
     language ? `Bahasa audio: ${language}.` : '',
     'Jangan meringkas, menerjemahkan, atau menambah komentar.',
@@ -209,6 +215,25 @@ const transcribeViaChat = async ({ buffer, filename }, { language } = {}) => {
     'Jika audio hanya berisi noise, dengung, angin, musik, bunyi benda, napas, atau suara yang tidak jelas sebagai kata,',
     'atau tidak ada ucapan manusia yang dapat dipahami, balas persis dengan: [NO_SPEECH]',
   ].filter(Boolean).join(' ');
+};
+
+// Balasan model: "[LANG:xx]" di baris pertama lalu teks transkrip, atau "[NO_SPEECH]"
+const parseTranscribeReply = (rawReply, language) => {
+  const raw = (rawReply || '').trim();
+  const match = raw.match(/^\s*\[LANG:\s*([a-zA-Z-]{2,10})\s*\]\s*/);
+  const text = (match ? raw.slice(match[0].length) : raw).trim();
+  return {
+    text: text === '[NO_SPEECH]' || raw === '[NO_SPEECH]' ? '' : text,
+    language: normalizeLanguage(language || (match && match[1])),
+    duration: null,
+    segments: [],
+  };
+};
+
+const transcribeViaChat = async ({ buffer, filename }, { language } = {}) => {
+  const { openai } = getClient();
+  const ext = path.extname(filename).replace('.', '').toLowerCase();
+  const instruction = buildTranscribePrompt(language);
 
   const completion = await openai.chat.completions.create({
     model: aiConfig.STT_MODEL,
@@ -222,20 +247,77 @@ const transcribeViaChat = async ({ buffer, filename }, { language } = {}) => {
     }],
   });
 
-  const raw = (completion.choices?.[0]?.message?.content || '').trim();
-  const match = raw.match(/^\s*\[LANG:\s*([a-zA-Z-]{2,10})\s*\]\s*/);
-  const text = (match ? raw.slice(match[0].length) : raw).trim();
-  return {
-    text: text === '[NO_SPEECH]' || raw === '[NO_SPEECH]' ? '' : text,
-    language: normalizeLanguage(language || (match && match[1])),
-    duration: null,
-    segments: [],
-  };
+  return parseTranscribeReply(completion.choices?.[0]?.message?.content, language);
+};
+
+const GOOGLE_MIME = {
+  '.mp3': 'audio/mp3',
+  '.mpeg': 'audio/mpeg',
+  '.mpga': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.mp4': 'audio/mp4',
+  '.webm': 'audio/webm',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+};
+
+// Batas total request inline Gemini 20MB; base64 menambah ±33%, sisakan ruang untuk prompt
+const GOOGLE_INLINE_MAX_BYTES = 14 * 1024 * 1024;
+
+/**
+ * Speech-to-text via Google AI Studio (Gemini API generateContent), audio dikirim inline base64
+ */
+const transcribeViaGoogle = async ({ buffer, filename }, { language } = {}) => {
+  if (!aiConfig.GOOGLE_STT_API_KEY) {
+    throw new VoiceError('GOOGLE_STT_API_KEY belum diisi (dibutuhkan untuk STT_MODE=google)', 500);
+  }
+  if (buffer.length > GOOGLE_INLINE_MAX_BYTES) {
+    throw new VoiceError(
+      'Ukuran audio melebihi 14MB, batas pengiriman inline Google. Gunakan STT_MODE=whisper untuk file besar',
+      413,
+    );
+  }
+  const mimeType = GOOGLE_MIME[path.extname(filename).toLowerCase()] || 'audio/mpeg';
+  const baseUrl = aiConfig.STT_GOOGLE_BASE_URL.replace(/\/+$/, '');
+  const url = `${baseUrl}/models/${encodeURIComponent(aiConfig.STT_MODEL)}:generateContent`;
+
+  let response;
+  try {
+    response = await axios.post(url, {
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: buildTranscribePrompt(language) },
+          { inline_data: { mime_type: mimeType, data: buffer.toString('base64') } },
+        ],
+      }],
+      generationConfig: { temperature: 0 },
+    }, {
+      headers: { 'x-goog-api-key': aiConfig.GOOGLE_STT_API_KEY, 'Content-Type': 'application/json' },
+      timeout: 180000,
+      maxBodyLength: Infinity,
+    });
+  } catch (error) {
+    const status = error.response?.status;
+    const detail = error.response?.data?.error?.message || error.message;
+    throw new VoiceError(`Google STT gagal${status ? ` (HTTP ${status})` : ''}: ${String(detail).slice(0, 300)}`, 502);
+  }
+
+  const data = response.data || {};
+  if (data.promptFeedback?.blockReason) {
+    throw new VoiceError(`Google STT menolak audio: ${data.promptFeedback.blockReason}`, 422);
+  }
+  const reply = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  return parseTranscribeReply(reply, language);
 };
 
 const transcribe = async ({ buffer, filename }, { language, prompt } = {}) => {
   if (aiConfig.STT_MODE === 'chat') {
     return transcribeViaChat({ buffer, filename }, { language });
+  }
+  if (aiConfig.STT_MODE === 'google') {
+    return transcribeViaGoogle({ buffer, filename }, { language });
   }
 
   // Whisper selalu lewat OpenAI langsung (Sumopod tidak punya /audio/transcriptions),
@@ -306,7 +388,7 @@ const analyzeTranscript = async (transcript, { instruction, outputLanguage = 'id
 
   const systemPrompt = [
     'Kamu adalah analis percakapan suara untuk Motor Sights International (MSI).',
-    `Tulis seluruh hasil analisis dalam bahasa dengan kode "${outputLanguage}".`,
+    `IMPORTANT: write every text value in the JSON (summary, key_points, action_items, topics, custom_answer) in ${languageName(outputLanguage)} ("${outputLanguage}"), regardless of the language of the transcript or of these instructions.`,
     'Balas HANYA dengan JSON valid (tanpa markdown) dengan struktur:',
     '{',
     '  "summary": string,',
@@ -351,7 +433,35 @@ const analyzeTranscript = async (transcript, { instruction, outputLanguage = 'id
  * Dipakai bersama oleh jalur sinkron (handler) dan worker antrian.
  * Melempar VoiceError(422) jika tidak ada ucapan.
  */
-const runPipeline = async ({ audioUrl, language, outputLanguage, analyze, instruction }) => {
+/**
+ * Ringkasan singkat dari teks transkrip (teks biasa, bukan JSON)
+ */
+const summarizeText = async (text, { outputLanguage = 'id' } = {}) => {
+  const { openai, config } = getClient();
+
+  const completion = await openai.chat.completions.create({
+    model: aiConfig.STT_ANALYSIS_MODEL || config.model,
+    temperature: 0.2,
+    messages: [
+      {
+        role: 'system',
+        content: [
+          'Kamu merangkum transkrip ucapan.',
+          `Write the summary in ${languageName(outputLanguage)} (ISO-639-1 "${outputLanguage}"), 2 to 4 sentences, as one paragraph, regardless of the language of the transcript.`,
+          'Hanya cantumkan hal yang benar-benar ada di transkrip (nama, angka, keputusan, tindak lanjut). Jangan mengarang.',
+          'Balas HANYA dengan teks ringkasan, tanpa judul, daftar, atau tanda kutip.',
+        ].join(' '),
+      },
+      { role: 'user', content: text },
+    ],
+  });
+
+  return (completion.choices?.[0]?.message?.content || '').trim();
+};
+
+const runPipeline = async ({
+  audioUrl, language, outputLanguage, analyze, instruction, summarize,
+}) => {
   const audio = await downloadAudio(audioUrl);
   const transcription = await transcribe(audio, { language });
 
@@ -372,13 +482,17 @@ const runPipeline = async ({ audioUrl, language, outputLanguage, analyze, instru
     });
   }
 
-  let analysis = null;
-  if (analyze === true) {
-    analysis = await analyzeTranscript(translation || transcription.text, {
-      instruction,
-      outputLanguage: targetLanguage || detectedLanguage || 'id',
-    });
-  }
+  // Ringkasan dan analisis tidak saling bergantung, jalankan bersamaan
+  const sourceText = translation || transcription.text;
+  const resultLanguage = targetLanguage || detectedLanguage || 'id';
+  const [analysis, summary] = await Promise.all([
+    analyze === true
+      ? analyzeTranscript(sourceText, { instruction, outputLanguage: resultLanguage })
+      : null,
+    summarize === true
+      ? summarizeText(sourceText, { outputLanguage: resultLanguage })
+      : null,
+  ]);
 
   return {
     sizeBytes: audio.sizeBytes,
@@ -387,6 +501,7 @@ const runPipeline = async ({ audioUrl, language, outputLanguage, analyze, instru
     needsTranslation,
     translation,
     analysis,
+    summary,
   };
 };
 
@@ -396,6 +511,7 @@ module.exports = {
   downloadAudio,
   transcribe,
   translateText,
+  summarizeText,
   normalizeLanguage,
   analyzeTranscript,
   SUPPORTED_EXTENSIONS,

@@ -21,14 +21,22 @@ module.exports = {
   // Voice (Speech-to-Text) Configuration
   // STT_MODE:
   //   'whisper' → OpenAI /audio/transcriptions (whisper-1), selalu lewat OpenAI langsung memakai OPENAI_STT_API_KEY
+  //   'google'  → Google AI Studio (Gemini API) langsung, memakai GOOGLE_STT_API_KEY
   //   'chat'    → kirim audio ke chat model multimodal (mis. Gemini) via provider chat (Sumopod) /chat/completions
-  // Default: 'whisper' jika OPENAI_STT_API_KEY terisi, selain itu 'chat'
-  STT_MODE: process.env.STT_MODE || (process.env.OPENAI_STT_API_KEY ? 'whisper' : 'chat'),
-  STT_MODEL: process.env.STT_MODEL || (
-    (process.env.STT_MODE || (process.env.OPENAI_STT_API_KEY ? 'whisper' : 'chat')) === 'chat'
-      ? 'gemini/gemini-3.5-flash'
-      : 'whisper-1'
+  // Default: 'whisper' jika OPENAI_STT_API_KEY terisi, 'google' jika GOOGLE_STT_API_KEY terisi, selain itu 'chat'
+  STT_MODE: process.env.STT_MODE || (
+    process.env.OPENAI_STT_API_KEY ? 'whisper' : (process.env.GOOGLE_STT_API_KEY ? 'google' : 'chat')
   ),
+  STT_MODEL: process.env.STT_MODEL || ({
+    whisper: 'whisper-1',
+    google: 'gemini-3.7-flash',
+    chat: 'gemini/gemini-3.5-flash',
+  })[process.env.STT_MODE || (
+    process.env.OPENAI_STT_API_KEY ? 'whisper' : (process.env.GOOGLE_STT_API_KEY ? 'google' : 'chat')
+  )],
+  // Key Google AI Studio khusus speech-to-text (STT_MODE=google)
+  GOOGLE_STT_API_KEY: process.env.GOOGLE_STT_API_KEY || '',
+  STT_GOOGLE_BASE_URL: process.env.STT_GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
   // Base URL OpenAI khusus STT whisper (ubah jika memakai proxy/Azure)
   STT_OPENAI_BASE_URL: process.env.STT_OPENAI_BASE_URL || 'https://api.openai.com/v1',
   STT_MAX_FILE_MB: parseInt(process.env.STT_MAX_FILE_MB || '25', 10), // batas Whisper 25MB

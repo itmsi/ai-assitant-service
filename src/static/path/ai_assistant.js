@@ -270,6 +270,13 @@ const aiAssistantPaths = {
                   output_language: 'id'
                 }
               },
+              withSummary: {
+                summary: 'Transkrip + ringkasan',
+                value: {
+                  audio_url: 'https://cloud.motorsights.com/s/AmjNdn8gmC7t96t',
+                  summarize: true
+                }
+              },
               asyncQueue: {
                 summary: 'Lewat antrian RabbitMQ (balas 202 + id, ambil hasil via GET /speech-to-text/{id})',
                 value: {
@@ -329,6 +336,28 @@ const aiAssistantPaths = {
             'application/json': {
               schema: { $ref: '#/components/schemas/AiSpeechToTextResponse' },
               examples: {
+                withSummary: {
+                  summary: 'summarize = true',
+                  value: {
+                    success: true,
+                    message: 'Speech to text berhasil diproses',
+                    data: {
+                      id: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d',
+                      audio_url: 'https://cloud.motorsights.com/s/AmjNdn8gmC7t96t',
+                      size_bytes: 625771,
+                      language: 'id',
+                      duration: 38.8,
+                      transcript: 'Halo, perkenalkan nama saya Adam, saya lulusan baru dari Universitas Jayabaya...',
+                      output_language: null,
+                      translated: false,
+                      translation: null,
+                      summary: 'Adam memperkenalkan diri sebagai lulusan baru Universitas Jayabaya yang kini berkarier sebagai management trainee di bidang sales.',
+                      analysis: null,
+                      cached: false,
+                      processing_ms: 6900
+                    }
+                  }
+                },
                 transcriptOnly: {
                   summary: 'Transkrip saja',
                   value: {

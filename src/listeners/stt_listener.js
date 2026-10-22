@@ -48,6 +48,7 @@ const processJob = async (id, token = null) => {
       outputLanguage: params.output_language,
       analyze: params.analyze === true,
       instruction: params.instruction,
+      summarize: params.summarize === true,
     })
 
     await transcriptionRepo.markDone(id, {
@@ -58,6 +59,7 @@ const processJob = async (id, token = null) => {
       transcript: result.transcription.text,
       translation: result.translation,
       segments: result.transcription.segments,
+      summary: result.summary,
       analysis: result.analysis,
       duration: result.transcription.duration,
       sttModel: aiConfig.STT_MODEL,

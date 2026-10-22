@@ -185,6 +185,11 @@ const aiAssistantSchemas = {
         default: false,
         description: 'Opsional. true = tambahkan analisis AI pada field `analysis`'
       },
+      summarize: {
+        type: 'boolean',
+        default: false,
+        description: 'Opsional. true = tambahkan ringkasan singkat (2-4 kalimat) dari transkrip pada field `summary`. Ditulis dalam output_language jika dikirim, jika tidak dalam bahasa audio'
+      },
       instruction: {
         type: 'string',
         maxLength: 1000,
@@ -267,6 +272,12 @@ const aiAssistantSchemas = {
         type: 'array',
         description: 'Hanya muncul jika include_segments=true',
         items: { $ref: '#/components/schemas/AiSpeechToTextSegment' }
+      },
+      summary: {
+        type: 'string',
+        nullable: true,
+        description: 'Ringkasan transkrip, hanya terisi jika summarize=true',
+        example: 'Adam memperkenalkan diri sebagai lulusan baru Universitas Jayabaya yang kini berkarier sebagai management trainee di bidang sales.'
       },
       analysis: { $ref: '#/components/schemas/AiSpeechToTextAnalysis' },
       processing_ms: { type: 'integer', example: 3120 }

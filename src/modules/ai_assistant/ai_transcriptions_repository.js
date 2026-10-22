@@ -21,17 +21,21 @@ const parseJson = (value) => {
 /**
  * Kunci cache dari parameter yang memengaruhi hasil
  */
-const buildRequestHash = ({ userId, audioUrl, language, outputLanguage, analyze, instruction }) => crypto
-  .createHash('sha256')
-  .update(JSON.stringify([
+const buildRequestHash = ({
+  userId, audioUrl, language, outputLanguage, analyze, instruction, summarize,
+}) => {
+  const parts = [
     userId || '',
     audioUrl,
     (language || '').toLowerCase(),
     (outputLanguage || '').toLowerCase(),
     analyze === true,
     analyze === true ? (instruction || '').trim() : '',
-  ]))
-  .digest('hex');
+  ];
+  // Hanya ditambahkan saat aktif, agar hash (dan cache) request lama tanpa summary tetap sama
+  if (summarize === true) parts.push('summarize');
+  return crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+};
 
 const toRecord = (row) => (row ? {
   id: row.id,
@@ -44,6 +48,7 @@ const toRecord = (row) => (row ? {
   transcript: row.transcript,
   translation: row.translation,
   segments: parseJson(row.segments) || [],
+  summary: row.summary,
   analysis: parseJson(row.analysis),
   duration: row.duration,
   stt_model: row.stt_model,
@@ -73,6 +78,7 @@ const saveTranscription = async (data) => {
         transcript: data.transcript,
         translation: data.translation || null,
         segments: JSON.stringify(data.segments || []),
+        summary: data.summary || null,
         analysis: data.analysis ? JSON.stringify(data.analysis) : null,
         duration: data.duration ?? null,
         stt_model: data.sttModel || null,
@@ -196,6 +202,7 @@ const markDone = async (id, data) => {
       transcript: data.transcript,
       translation: data.translation || null,
       segments: JSON.stringify(data.segments || []),
+      summary: data.summary || null,
       analysis: data.analysis ? JSON.stringify(data.analysis) : null,
       duration: data.duration ?? null,
       stt_model: data.sttModel || null,

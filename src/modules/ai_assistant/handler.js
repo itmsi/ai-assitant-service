@@ -651,6 +651,7 @@ const formatTranscription = (record, includeSegments) => ({
   translated: record.translated,
   translation: record.translation,
   segments: includeSegments ? record.segments : undefined,
+  summary: record.summary,
   analysis: record.analysis,
   created_at: record.created_at,
   finished_at: record.finished_at,
@@ -658,13 +659,14 @@ const formatTranscription = (record, includeSegments) => ({
 
 /**
  * Speech-to-text — ubah audio dari URL menjadi teks (analisis AI opsional)
- * Body: { audio_url, language?, analyze?, instruction?, output_language?, include_segments?, force_refresh? }
+ * Body: { audio_url, language?, analyze?, summarize?, instruction?, output_language?, include_segments?, force_refresh? }
  */
 const speechToText = async (req, res) => {
   const {
     audio_url: audioUrl,
     language,
     analyze = false,
+    summarize = false,
     instruction,
     output_language: outputLanguage,
     include_segments: includeSegments = false,
@@ -708,6 +710,7 @@ const speechToText = async (req, res) => {
       outputLanguage,
       analyze,
       instruction,
+      summarize,
     });
 
     if (aiConfig.STT_CACHE_TTL_HOURS > 0 && !forceRefresh) {
@@ -753,6 +756,7 @@ const speechToText = async (req, res) => {
           language: language || null,
           output_language: outputLanguage || null,
           analyze: analyze === true,
+          summarize: summarize === true,
           instruction: instruction || null,
         },
       });
@@ -779,9 +783,9 @@ const speechToText = async (req, res) => {
     }
 
     const {
-      sizeBytes, transcription, targetLanguage, needsTranslation, translation, analysis,
+      sizeBytes, transcription, targetLanguage, needsTranslation, translation, analysis, summary,
     } = await voiceService.runPipeline({
-      audioUrl, language, outputLanguage, analyze, instruction,
+      audioUrl, language, outputLanguage, analyze, instruction, summarize,
     });
     const audio = { sizeBytes };
 
@@ -799,6 +803,7 @@ const speechToText = async (req, res) => {
       transcript: transcription.text,
       translation,
       segments: transcription.segments,
+      summary,
       analysis,
       duration: transcription.duration,
       sttModel: aiConfig.STT_MODEL,
@@ -819,6 +824,7 @@ const speechToText = async (req, res) => {
         translated: needsTranslation,
         translation,
         segments: includeSegments ? transcription.segments : undefined,
+        summary,
         analysis,
         cached: false,
         processing_ms: processingMs,
