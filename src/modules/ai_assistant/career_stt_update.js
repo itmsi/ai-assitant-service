@@ -26,12 +26,15 @@ const buildPayload = (job, outcome) => {
   if (outcome.error) {
     return {
       file_link_audio: job.audio_url,
+      transcription_id: job.id,
       status_speech_text: 'Failed',
       message_speech_text: `Transcribe gagal: ${outcome.error}`,
     };
   }
   return {
     file_link_audio: job.audio_url,
+    // ID di ai_transcriptions, dipakai nanti untuk POST /ai-assistant/summarize
+    transcription_id: job.id,
     // Jika output_language diminta dan berbeda dari bahasa audio, yang dikirim adalah hasil terjemahannya
     speech_text: outcome.translation || outcome.transcript,
     status_speech_text: 'Success',
