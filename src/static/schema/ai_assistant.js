@@ -187,8 +187,8 @@ const aiAssistantSchemas = {
       },
       summarize: {
         type: 'boolean',
-        default: false,
-        description: 'Opsional. true = tambahkan ringkasan singkat (2-4 kalimat) dari transkrip pada field `summary`. Ditulis dalam output_language jika dikirim, jika tidak dalam bahasa audio'
+        default: true,
+        description: 'Opsional, default true. Ringkasan singkat (2-4 kalimat) dari transkrip dibuat otomatis pada field `summary`, ditulis dalam output_language jika dikirim, jika tidak dalam bahasa audio. Kirim false untuk melewatinya (lebih cepat dan hemat biaya). Jika pembuatan ringkasan gagal, transkrip tetap dikembalikan dengan summary null'
       },
       instruction: {
         type: 'string',
@@ -284,7 +284,7 @@ const aiAssistantSchemas = {
       summary: {
         type: 'string',
         nullable: true,
-        description: 'Ringkasan transkrip, hanya terisi jika summarize=true',
+        description: 'Ringkasan transkrip otomatis. Terisi kecuali summarize=false atau pembuatan ringkasan gagal',
         example: 'Adam memperkenalkan diri sebagai lulusan baru Universitas Jayabaya yang kini berkarier sebagai management trainee di bidang sales.'
       },
       analysis: { $ref: '#/components/schemas/AiSpeechToTextAnalysis' },
@@ -333,6 +333,7 @@ const aiAssistantSchemas = {
       data: {
         type: 'object',
         properties: {
+          synced_to_career: { type: 'boolean', description: 'true jika summary_update berhasil diteruskan ke api-career (POST /applicant_form_contents/update-stt). Hanya untuk transcription_id; false jika memakai text, api-career tidak aktif, atau gagal' },
           saved: { type: 'boolean', description: 'true jika hasil tersimpan ke summary_update. Hanya mungkin saat memakai transcription_id; false jika memakai text, atau penyimpanan gagal' },
           summary_updated_by_id: { type: 'string', nullable: true, example: 'f0b57258-5f33-4e03-81f7-cd70d833b5c5' },
           summary_updated_by_name: { type: 'string', nullable: true, example: 'Rina HRD' },

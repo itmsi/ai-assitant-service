@@ -14,6 +14,7 @@ const aiConfig = require('../../config/ai');
 const voiceService = require('./voice_service');
 const transcriptionRepo = require('./ai_transcriptions_repository');
 const sttListener = require('../../listeners/stt_listener');
+const careerSttUpdate = require('./career_stt_update');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
@@ -662,14 +663,14 @@ const formatTranscription = (record, includeSegments) => ({
 
 /**
  * Speech-to-text — ubah audio dari URL menjadi teks (analisis AI opsional)
- * Body: { audio_url, language?, analyze?, summarize?, instruction?, output_language?, include_segments?, force_refresh? }
+ * Body: { audio_url, language?, analyze?, summarize? (default true), instruction?, output_language?, include_segments?, force_refresh? }
  */
 const speechToText = async (req, res) => {
   const {
     audio_url: audioUrl,
     language,
     analyze = false,
-    summarize = false,
+    summarize = true, // default aktif; kirim summarize: false untuk melewatinya
     instruction,
     output_language: outputLanguage,
     include_segments: includeSegments = false,
@@ -984,10 +985,11 @@ const summarizeTranscript = async (req, res) => {
   const startedAt = Date.now();
   try {
     let source = text ? text.trim() : '';
+    let record = null;
     if (transcriptionId) {
       // Rekaman dibuat oleh alur applicant form, sedangkan peringkasnya HRD: pemilik record tidak dicocokkan.
       // Akses dijaga oleh token login + ID record yang tidak bisa ditebak
-      const record = await transcriptionRepo.getById(transcriptionId);
+      record = await transcriptionRepo.getById(transcriptionId);
       if (!record || record.status !== 'success') {
         return res.status(404).json({
           success: false,
@@ -1012,6 +1014,14 @@ const summarizeTranscript = async (req, res) => {
       });
     }
 
+    // Teruskan ke api-career (summary_update saja) memakai token pemanggil. Hanya untuk transcription_id,
+    // karena butuh file_link_audio dari record. Gagal di sini tidak menggagalkan request
+    let syncedToCareer = false;
+    if (record) {
+      const token = req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+      syncedToCareer = await careerSttUpdate.updateSummaryResult(record, summary, token);
+    }
+
     return baseResponseGeneral(res, {
       success: true,
       message: transcriptionId && !saved
@@ -1020,6 +1030,7 @@ const summarizeTranscript = async (req, res) => {
       data: {
         summary,
         saved: Boolean(saved),
+        synced_to_career: syncedToCareer,
         summary_updated_by_id: saved ? saved.summary_updated_by_id : null,
         summary_updated_by_name: saved ? saved.summary_updated_by_name : null,
         output_language: String(outputLanguage).toLowerCase(),

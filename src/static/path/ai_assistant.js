@@ -270,11 +270,11 @@ const aiAssistantPaths = {
                   output_language: 'id'
                 }
               },
-              withSummary: {
-                summary: 'Transkrip + ringkasan',
+              withoutSummary: {
+                summary: 'Tanpa ringkasan (summarize: false)',
                 value: {
                   audio_url: 'https://cloud.motorsights.com/s/AmjNdn8gmC7t96t',
-                  summarize: true
+                  summarize: false
                 }
               },
               asyncQueue: {
@@ -337,7 +337,7 @@ const aiAssistantPaths = {
               schema: { $ref: '#/components/schemas/AiSpeechToTextResponse' },
               examples: {
                 withSummary: {
-                  summary: 'summarize = true',
+                  summary: 'Default (summarize = true): transkrip + ringkasan',
                   value: {
                     success: true,
                     message: 'Speech to text berhasil diproses',
@@ -504,7 +504,7 @@ const aiAssistantPaths = {
     post: {
       tags: ['AI Assistant'],
       summary: 'Ringkas teks/transkrip dengan perintah bebas',
-      description: 'Untuk HRD yang ingin membuat ringkasan sendiri dari UI MSI, di luar applicant form. **Jalur utama: kirim `transcription_id` dari hasil speech-to-text yang sudah ada**, dan opsional `instruction` berisi perintah bebas. Hasilnya disimpan ke kolom `summary_update` beserta ID dan nama pembuat dari token login (menimpa isi sebelumnya). Alternatif: kirim `text` langsung, tetapi hasilnya hanya dikembalikan dan tidak disimpan. Wajib token SSO. Jawaban hanya berdasarkan isi transkrip; isi transkrip diperlakukan sebagai data, bukan perintah.',
+      description: 'Untuk HRD yang ingin membuat ringkasan sendiri dari UI MSI, di luar applicant form. **Jalur utama: kirim `transcription_id` dari hasil speech-to-text yang sudah ada**, dan opsional `instruction` berisi perintah bebas. Hasilnya disimpan ke kolom `summary_update` beserta ID dan nama pembuat dari token login (menimpa isi sebelumnya). Hasil juga diteruskan ke api-career (POST /applicant_form_contents/update-stt, hanya field `summary_update` bersama `file_link_audio` dan `transcription_id`) memakai token pemanggil; lihat `synced_to_career` di respons. Alternatif: kirim `text` langsung, tetapi hasilnya hanya dikembalikan dan tidak disimpan. Wajib token SSO. Jawaban hanya berdasarkan isi transkrip; isi transkrip diperlakukan sebagai data, bukan perintah.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
