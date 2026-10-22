@@ -21,17 +21,21 @@ const parseJson = (value) => {
 /**
  * Kunci cache dari parameter yang memengaruhi hasil
  */
-const buildRequestHash = ({ userId, audioUrl, language, outputLanguage, analyze, instruction }) => crypto
-  .createHash('sha256')
-  .update(JSON.stringify([
+const buildRequestHash = ({
+  userId, audioUrl, language, outputLanguage, analyze, instruction, summarize,
+}) => {
+  const parts = [
     userId || '',
     audioUrl,
     (language || '').toLowerCase(),
     (outputLanguage || '').toLowerCase(),
     analyze === true,
     analyze === true ? (instruction || '').trim() : '',
-  ]))
-  .digest('hex');
+  ];
+  // Hanya ditambahkan saat aktif, agar hash (dan cache) request lama tanpa summary tetap sama
+  if (summarize === true) parts.push('summarize');
+  return crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex');
+};
 
 const toRecord = (row) => (row ? {
   id: row.id,
@@ -44,6 +48,10 @@ const toRecord = (row) => (row ? {
   transcript: row.transcript,
   translation: row.translation,
   segments: parseJson(row.segments) || [],
+  summary: row.summary,
+  summary_update: row.summary_update,
+  summary_updated_by_id: row.summary_updated_by_id,
+  summary_updated_by_name: row.summary_updated_by_name,
   analysis: parseJson(row.analysis),
   duration: row.duration,
   stt_model: row.stt_model,
@@ -73,6 +81,7 @@ const saveTranscription = async (data) => {
         transcript: data.transcript,
         translation: data.translation || null,
         segments: JSON.stringify(data.segments || []),
+        summary: data.summary || null,
         analysis: data.analysis ? JSON.stringify(data.analysis) : null,
         duration: data.duration ?? null,
         stt_model: data.sttModel || null,
@@ -196,12 +205,33 @@ const markDone = async (id, data) => {
       transcript: data.transcript,
       translation: data.translation || null,
       segments: JSON.stringify(data.segments || []),
+      summary: data.summary || null,
       analysis: data.analysis ? JSON.stringify(data.analysis) : null,
       duration: data.duration ?? null,
       stt_model: data.sttModel || null,
       processing_ms: data.processingMs ?? null,
       finished_at: db.fn.now(),
     });
+};
+
+/**
+ * Simpan ringkasan hasil perintah HRD beserta identitas pembuatnya (dari token login MSI)
+ */
+const saveSummaryUpdate = async (id, { summary, updatedById, updatedByName }) => {
+  try {
+    const [row] = await db('ai_transcriptions')
+      .where({ id })
+      .update({
+        summary_update: summary,
+        summary_updated_by_id: updatedById || null,
+        summary_updated_by_name: updatedByName || null,
+      })
+      .returning('*');
+    return toRecord(row);
+  } catch (error) {
+    logger.error(`Error saving summary update: ${error.message || error}`);
+    return null;
+  }
 };
 
 const markFailed = async (id, message) => {
@@ -224,6 +254,7 @@ module.exports = {
   claimForProcessing,
   markDone,
   markFailed,
+  saveSummaryUpdate,
   buildRequestHash,
   saveTranscription,
   findCached,

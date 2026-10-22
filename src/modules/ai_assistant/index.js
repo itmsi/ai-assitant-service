@@ -1,7 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const handler = require('./handler');
-const { optionalSSOToken } = require('./middleware/sso');
+const { optionalSSOToken, requireSSOToken, extractToken } = require('./middleware/sso');
+
+// requireSSOToken punya fallback auto-login (token akun service) jika request tanpa token.
+// Untuk endpoint yang memproses data kandidat, token milik pemanggil wajib ada.
+const requireClientToken = (req, res, next) => {
+  if (!extractToken(req)) {
+    return res.status(401).json({
+      success: false,
+      message: 'SSO token diperlukan',
+    });
+  }
+  return next();
+};
 let memoryRoutes = null;
 try {
   memoryRoutes = require('./memory/index');
@@ -92,6 +104,19 @@ router.post(
   '/speech-to-text',
   optionalSSOToken,
   handler.speechToText
+);
+
+/**
+ * @route   POST /api/mosa/ai-assistant/summarize
+ * @desc    Ringkas teks/transkrip sesuai perintah bebas dari HRD (tidak disimpan ke DB)
+ * @access  Protected (wajib token SSO)
+ * @body    { text?: string, transcription_id?: uuid, instruction?: string, output_language?: string }
+ */
+router.post(
+  '/summarize',
+  requireClientToken,
+  requireSSOToken,
+  handler.summarizeTranscript
 );
 
 /**

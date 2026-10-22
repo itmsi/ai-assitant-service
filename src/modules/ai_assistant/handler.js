@@ -651,6 +651,10 @@ const formatTranscription = (record, includeSegments) => ({
   translated: record.translated,
   translation: record.translation,
   segments: includeSegments ? record.segments : undefined,
+  summary: record.summary,
+  summary_update: record.summary_update,
+  summary_updated_by_id: record.summary_updated_by_id,
+  summary_updated_by_name: record.summary_updated_by_name,
   analysis: record.analysis,
   created_at: record.created_at,
   finished_at: record.finished_at,
@@ -658,13 +662,14 @@ const formatTranscription = (record, includeSegments) => ({
 
 /**
  * Speech-to-text — ubah audio dari URL menjadi teks (analisis AI opsional)
- * Body: { audio_url, language?, analyze?, instruction?, output_language?, include_segments?, force_refresh? }
+ * Body: { audio_url, language?, analyze?, summarize?, instruction?, output_language?, include_segments?, force_refresh? }
  */
 const speechToText = async (req, res) => {
   const {
     audio_url: audioUrl,
     language,
     analyze = false,
+    summarize = false,
     instruction,
     output_language: outputLanguage,
     include_segments: includeSegments = false,
@@ -708,6 +713,7 @@ const speechToText = async (req, res) => {
       outputLanguage,
       analyze,
       instruction,
+      summarize,
     });
 
     if (aiConfig.STT_CACHE_TTL_HOURS > 0 && !forceRefresh) {
@@ -753,6 +759,7 @@ const speechToText = async (req, res) => {
           language: language || null,
           output_language: outputLanguage || null,
           analyze: analyze === true,
+          summarize: summarize === true,
           instruction: instruction || null,
         },
       });
@@ -779,9 +786,9 @@ const speechToText = async (req, res) => {
     }
 
     const {
-      sizeBytes, transcription, targetLanguage, needsTranslation, translation, analysis,
+      sizeBytes, transcription, targetLanguage, needsTranslation, translation, analysis, summary,
     } = await voiceService.runPipeline({
-      audioUrl, language, outputLanguage, analyze, instruction,
+      audioUrl, language, outputLanguage, analyze, instruction, summarize,
     });
     const audio = { sizeBytes };
 
@@ -799,6 +806,7 @@ const speechToText = async (req, res) => {
       transcript: transcription.text,
       translation,
       segments: transcription.segments,
+      summary,
       analysis,
       duration: transcription.duration,
       sttModel: aiConfig.STT_MODEL,
@@ -819,6 +827,7 @@ const speechToText = async (req, res) => {
         translated: needsTranslation,
         translation,
         segments: includeSegments ? transcription.segments : undefined,
+        summary,
         analysis,
         cached: false,
         processing_ms: processingMs,
@@ -903,7 +912,134 @@ const getTranscription = async (req, res) => {
   }
 };
 
+const SUMMARIZE_MAX_CHARS = 50000;
+
+// Identitas pemanggil dari token login MSI (urutan klaim mengikuti api-career)
+const getRequester = (req) => {
+  const user = req.user || {};
+  const pick = (fields) => {
+    for (const field of fields) {
+      if (user[field]) return String(user[field]);
+    }
+    return null;
+  };
+  return {
+    id: pick(['employee_id', 'user_id', 'users_id', 'sub', 'id']),
+    name: pick(['name', 'employee_name', 'full_name', 'preferred_username', 'username']),
+  };
+};
+
+/**
+ * Ringkasan teks/transkrip dengan perintah bebas dari HRD.
+ * Dengan transcription_id, hasilnya disimpan ke kolom summary_update beserta pembuatnya (dari token);
+ * dengan text saja tidak ada record untuk diisi, sehingga tidak disimpan.
+ * Body: { text? | transcription_id?, instruction?, output_language? }
+ */
+const summarizeTranscript = async (req, res) => {
+  const {
+    text,
+    transcription_id: transcriptionId,
+    instruction,
+    output_language: outputLanguage = 'id',
+  } = req.body || {};
+
+  if (!text && !transcriptionId) {
+    return res.status(400).json({
+      success: false,
+      message: 'text atau transcription_id wajib diisi',
+    });
+  }
+  if (text && transcriptionId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Isi salah satu saja: text atau transcription_id',
+    });
+  }
+  if (text && (typeof text !== 'string' || !text.trim())) {
+    return res.status(400).json({ success: false, message: 'text harus berupa teks' });
+  }
+  if (text && text.length > SUMMARIZE_MAX_CHARS) {
+    return res.status(400).json({
+      success: false,
+      message: `text maksimal ${SUMMARIZE_MAX_CHARS} karakter`,
+    });
+  }
+  if (transcriptionId && !/^[0-9a-f-]{36}$/i.test(String(transcriptionId))) {
+    return res.status(400).json({ success: false, message: 'transcription_id tidak valid' });
+  }
+  if (instruction !== undefined && instruction !== null
+    && (typeof instruction !== 'string' || instruction.length > 2000)) {
+    return res.status(400).json({
+      success: false,
+      message: 'instruction harus string maksimal 2000 karakter',
+    });
+  }
+  if (!/^[a-z]{2}$/i.test(String(outputLanguage))) {
+    return res.status(400).json({
+      success: false,
+      message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+
+  const startedAt = Date.now();
+  try {
+    let source = text ? text.trim() : '';
+    if (transcriptionId) {
+      // Rekaman dibuat oleh alur applicant form, sedangkan peringkasnya HRD: pemilik record tidak dicocokkan.
+      // Akses dijaga oleh token login + ID record yang tidak bisa ditebak
+      const record = await transcriptionRepo.getById(transcriptionId);
+      if (!record || record.status !== 'success') {
+        return res.status(404).json({
+          success: false,
+          message: 'Data speech to text tidak ditemukan',
+        });
+      }
+      source = record.translation || record.transcript;
+    }
+
+    const summary = await voiceService.summarizeText(source, {
+      outputLanguage: String(outputLanguage).toLowerCase(),
+      instruction: instruction ? instruction.trim() : undefined,
+    });
+
+    let saved = null;
+    const requester = getRequester(req);
+    if (transcriptionId) {
+      saved = await transcriptionRepo.saveSummaryUpdate(transcriptionId, {
+        summary,
+        updatedById: requester.id,
+        updatedByName: requester.name,
+      });
+    }
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: transcriptionId && !saved
+        ? 'Ringkasan berhasil dibuat tetapi gagal disimpan'
+        : 'Ringkasan berhasil dibuat',
+      data: {
+        summary,
+        saved: Boolean(saved),
+        summary_updated_by_id: saved ? saved.summary_updated_by_id : null,
+        summary_updated_by_name: saved ? saved.summary_updated_by_name : null,
+        output_language: String(outputLanguage).toLowerCase(),
+        source: transcriptionId ? 'transcription' : 'text',
+        transcription_id: transcriptionId || null,
+        input_chars: source.length,
+        processing_ms: Date.now() - startedAt,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error in summarizeTranscript handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(error.status || 500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat membuat ringkasan',
+    });
+  }
+};
+
 module.exports = {
+  summarizeTranscript,
   speechToText,
   listTranscriptions,
   getTranscription,
