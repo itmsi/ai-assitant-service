@@ -13,7 +13,9 @@ const { getToolsForLangChain, executeTool } = require('./tools');
 const aiConfig = require('../../config/ai');
 const voiceService = require('./voice_service');
 const transcriptionRepo = require('./ai_transcriptions_repository');
+const crypto = require('crypto');
 const sttListener = require('../../listeners/stt_listener');
+const summaryAllListener = require('../../listeners/summary_all_listener');
 const careerSttUpdate = require('./career_stt_update');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
@@ -1062,9 +1064,9 @@ const SUMMARIZE_ALL_MAX_ITEMS = 30;
 
 /**
  * Ringkasan keseluruhan dari banyak transcription_id (jawaban satu kandidat).
- * Sumbernya transkrip tersimpan di DB, bukan ringkasan per item, supaya detail tidak hilang.
- * Semua ID wajib ada dan berstatus success; jika tidak, request gagal tanpa memanggil LLM.
- * Jika sukses, hasil dikirim ke api-career (POST /applicant-forms/summary-all) memakai ID pertama.
+ * Validasi dan pengecekan ID dilakukan langsung; semua ID wajib ada dan berstatus success.
+ * Pembuatan ringkasan berjalan di background lewat RabbitMQ (lihat listeners/summary_all_listener),
+ * hasilnya dikirim ke api-career (POST /applicant-forms/summary-all) memakai ID pertama.
  * Body: [{ transcription_id, instruction? }] atau { items: [...], output_language? }
  */
 const summarizeAllTranscripts = async (req, res) => {
@@ -1114,7 +1116,13 @@ const summarizeAllTranscripts = async (req, res) => {
     .filter(Boolean))];
   const language = String(outputLanguage).toLowerCase();
 
-  const startedAt = Date.now();
+  if (!sttListener.isQueueEnabled()) {
+    return res.status(503).json({
+      success: false,
+      message: 'Summary all tidak tersedia: RabbitMQ belum diaktifkan (RABBITMQ_ENABLED / RABBITMQ_URL)',
+    });
+  }
+
   try {
     const records = await transcriptionRepo.getByIds(ids);
     const byId = new Map(records.map((record) => [String(record.id).toLowerCase(), record]));
@@ -1130,37 +1138,39 @@ const summarizeAllTranscripts = async (req, res) => {
       });
     }
 
-    const texts = ids.map((id) => {
-      const record = byId.get(id);
-      return record.translation || record.transcript;
-    });
-    const summary = await voiceService.summarizeAll(texts, {
-      outputLanguage: language,
-      instructions,
-    });
+    const jobId = crypto.randomUUID();
+    try {
+      await summaryAllListener.publishSummaryAllJob({
+        job_id: jobId,
+        transcription_ids: ids,
+        instructions,
+        output_language: language,
+        token: req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '') || null,
+      });
+    } catch (queueError) {
+      logger.error(`[Summary All] Gagal publish ke RabbitMQ: ${queueError.message || queueError}`);
+      return res.status(503).json({
+        success: false,
+        message: 'Gagal memasukkan ke antrian RabbitMQ',
+      });
+    }
 
-    // Gagal kirim ke api-career tidak menggagalkan request; lihat synced_to_career
-    const token = req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
-    const syncedToCareer = await careerSttUpdate.updateSummaryAll(ids[0], summary, token);
-
-    return baseResponseGeneral(res, {
+    return res.status(202).json({
       success: true,
-      message: 'Ringkasan keseluruhan berhasil dibuat',
+      message: 'Summary all diterima dan masuk antrian, hasil dikirim ke api-career',
       data: {
-        summary,
-        synced_to_career: syncedToCareer,
+        job_id: jobId,
+        queued: true,
         output_language: language,
         transcription_ids: ids,
         instructions,
-        input_chars: texts.reduce((sum, text) => sum + text.length, 0),
-        processing_ms: Date.now() - startedAt,
       },
     });
   } catch (error) {
     logger.error(`Error in summarizeAllTranscripts handler: ${error.message || error}`);
     return baseResponseGeneral(res.status(error.status || 500), {
       success: false,
-      message: error.message || 'Terjadi kesalahan saat membuat ringkasan keseluruhan',
+      message: error.message || 'Terjadi kesalahan saat memproses summary all',
     });
   }
 };

@@ -584,7 +584,7 @@ const aiAssistantPaths = {
     post: {
       tags: ['AI Assistant'],
       summary: 'Ringkasan keseluruhan dari banyak transkrip',
-      description: 'Membuat SATU ringkasan dari beberapa hasil speech-to-text milik kandidat yang sama. Sumbernya transkrip tersimpan di DB (terjemahan jika ada), bukan ringkasan per item. Normalnya diproses dalam satu panggilan AI; jika total transkrip > 150.000 karakter, tiap transkrip diringkas dulu lalu digabung. `transcription_id` dan `instruction` yang sama hanya dipakai sekali. Semua ID wajib ada dan berstatus success, jika tidak request gagal (404) dengan daftar `invalid_ids`. Jika sukses, hasil dikirim ke api-career (POST /applicant-forms/summary-all, `{ transcription_id: <ID pertama>, summary }`) memakai token pemanggil; lihat `synced_to_career`. Hasil tidak disimpan di DB ai-assistant. Wajib token SSO.',
+      description: 'Membuat SATU ringkasan dari beberapa hasil speech-to-text milik kandidat yang sama. Sumbernya transkrip tersimpan di DB (terjemahan jika ada), bukan ringkasan per item. Normalnya diproses dalam satu panggilan AI; jika total transkrip > 150.000 karakter, tiap transkrip diringkas dulu lalu digabung. `transcription_id` dan `instruction` yang sama hanya dipakai sekali. Semua ID wajib ada dan berstatus success, jika tidak request langsung gagal (404) dengan daftar `invalid_ids`. **Diproses di background lewat RabbitMQ** (queue `SUMMARY_ALL_QUEUE_NAME`, default `ai-summarize-all`): endpoint langsung membalas 202 dengan `job_id`, lalu worker membuat ringkasan dan mengirimnya ke api-career (POST /applicant-forms/summary-all, `{ transcription_id: <ID pertama>, summary }`) memakai token pemanggil. Ringkasan tidak dikembalikan di respons dan tidak disimpan di DB ai-assistant; ambil hasilnya dari applicant_forms.summary_all di api-career. Kegagalan di worker hanya tercatat di log (`[Summary All Worker] <job_id>`). Butuh RABBITMQ_ENABLED=true + RABBITMQ_URL. Wajib token SSO.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -656,21 +656,19 @@ const aiAssistantPaths = {
         }
       },
       responses: {
-        200: {
-          description: 'Ringkasan keseluruhan berhasil dibuat',
+        202: {
+          description: 'Diterima dan masuk antrian; ringkasan dikirim ke api-career setelah selesai',
           content: {
             'application/json': {
               example: {
                 success: true,
-                message: 'Ringkasan keseluruhan berhasil dibuat',
+                message: 'Summary all diterima dan masuk antrian, hasil dikirim ke api-career',
                 data: {
-                  summary: 'Kelebihan:\n- Komunikatif ...\n\nKekurangan:\n- Belum berpengalaman di ...',
-                  synced_to_career: true,
+                  job_id: '5b1e7c2a-3f4d-4e8a-9c1b-2d3e4f5a6b7c',
+                  queued: true,
                   output_language: 'id',
                   transcription_ids: ['82957122-2eef-4461-b642-4de9e8d93876', '72058640-5531-4c30-8213-faf94cc1f943'],
-                  instructions: ['Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'],
-                  input_chars: 3120,
-                  processing_ms: 4200
+                  instructions: ['Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin']
                 }
               }
             }
@@ -697,7 +695,11 @@ const aiAssistantPaths = {
           }
         },
         500: {
-          description: 'Terjadi kesalahan saat membuat ringkasan keseluruhan',
+          description: 'Terjadi kesalahan saat memvalidasi data',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
+        503: {
+          description: 'RabbitMQ belum diaktifkan atau gagal memasukkan job ke antrian',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
         }
       }

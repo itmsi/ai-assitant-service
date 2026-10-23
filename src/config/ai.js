@@ -48,6 +48,9 @@ module.exports = {
   // Antrian RabbitMQ untuk request async (payload `async: true`). Butuh RABBITMQ_ENABLED=true + RABBITMQ_URL
   STT_QUEUE_NAME: process.env.STT_QUEUE_NAME || 'ai-speech-to-text',
   STT_QUEUE_CONCURRENCY: parseInt(process.env.STT_QUEUE_CONCURRENCY || '2', 10), // job diproses bersamaan
+  // Antrian POST /summarize-all (selalu lewat RabbitMQ, hasil dikirim ke api-career summary-all)
+  SUMMARY_ALL_QUEUE_NAME: process.env.SUMMARY_ALL_QUEUE_NAME || 'ai-summarize-all',
+  SUMMARY_ALL_QUEUE_CONCURRENCY: parseInt(process.env.SUMMARY_ALL_QUEUE_CONCURRENCY || '2', 10),
   // Model untuk analisis hasil transkrip (default: model chat provider aktif)
   STT_ANALYSIS_MODEL: process.env.STT_ANALYSIS_MODEL || '',
 
