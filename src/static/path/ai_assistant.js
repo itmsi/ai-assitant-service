@@ -580,6 +580,129 @@ const aiAssistantPaths = {
       }
     }
   },
+  '/ai-assistant/summarize-all': {
+    post: {
+      tags: ['AI Assistant'],
+      summary: 'Ringkasan keseluruhan dari banyak transkrip',
+      description: 'Membuat SATU ringkasan dari beberapa hasil speech-to-text milik kandidat yang sama. Sumbernya transkrip tersimpan di DB (terjemahan jika ada), bukan ringkasan per item. Normalnya diproses dalam satu panggilan AI; jika total transkrip > 150.000 karakter, tiap transkrip diringkas dulu lalu digabung. `transcription_id` dan `instruction` yang sama hanya dipakai sekali. Semua ID wajib ada dan berstatus success, jika tidak request gagal (404) dengan daftar `invalid_ids`. Jika sukses, hasil dikirim ke api-career (POST /applicant-forms/summary-all, `{ transcription_id: <ID pertama>, summary }`) memakai token pemanggil; lihat `synced_to_career`. Hasil tidak disimpan di DB ai-assistant. Wajib token SSO.',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              oneOf: [
+                {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: 30,
+                  items: {
+                    type: 'object',
+                    required: ['transcription_id'],
+                    properties: {
+                      transcription_id: { type: 'string', format: 'uuid' },
+                      instruction: { type: 'string', maxLength: 2000 }
+                    }
+                  }
+                },
+                {
+                  type: 'object',
+                  required: ['items'],
+                  properties: {
+                    items: {
+                      type: 'array',
+                      minItems: 1,
+                      maxItems: 30,
+                      items: {
+                        type: 'object',
+                        required: ['transcription_id'],
+                        properties: {
+                          transcription_id: { type: 'string', format: 'uuid' },
+                          instruction: { type: 'string', maxLength: 2000 }
+                        }
+                      }
+                    },
+                    output_language: { type: 'string', default: 'id', description: 'Kode bahasa ISO-639-1 untuk hasil (id, en, zh)' }
+                  }
+                }
+              ]
+            },
+            examples: {
+              array: {
+                summary: 'UTAMA - array transcription_id + instruksi',
+                value: [
+                  {
+                    transcription_id: '82957122-2eef-4461-b642-4de9e8d93876',
+                    instruction: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'
+                  },
+                  {
+                    transcription_id: '72058640-5531-4c30-8213-faf94cc1f943',
+                    instruction: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'
+                  }
+                ]
+              },
+              withLanguage: {
+                summary: 'Dengan output_language',
+                value: {
+                  items: [
+                    { transcription_id: '82957122-2eef-4461-b642-4de9e8d93876' },
+                    { transcription_id: '72058640-5531-4c30-8213-faf94cc1f943' }
+                  ],
+                  output_language: 'en'
+                }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Ringkasan keseluruhan berhasil dibuat',
+          content: {
+            'application/json': {
+              example: {
+                success: true,
+                message: 'Ringkasan keseluruhan berhasil dibuat',
+                data: {
+                  summary: 'Kelebihan:\n- Komunikatif ...\n\nKekurangan:\n- Belum berpengalaman di ...',
+                  synced_to_career: true,
+                  output_language: 'id',
+                  transcription_ids: ['82957122-2eef-4461-b642-4de9e8d93876', '72058640-5531-4c30-8213-faf94cc1f943'],
+                  instructions: ['Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'],
+                  input_chars: 3120,
+                  processing_ms: 4200
+                }
+              }
+            }
+          }
+        },
+        400: {
+          description: 'Validasi gagal (body bukan array/kosong, > 30 item, transcription_id tidak valid, instruction > 2.000 karakter, output_language tidak valid)',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
+        401: {
+          description: 'Token SSO tidak ada atau tidak valid',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        },
+        404: {
+          description: 'Ada transcription_id yang tidak ditemukan atau belum selesai',
+          content: {
+            'application/json': {
+              example: {
+                success: false,
+                message: 'Sebagian data speech to text tidak ditemukan atau belum selesai',
+                data: { invalid_ids: ['72058640-5531-4c30-8213-faf94cc1f943'] }
+              }
+            }
+          }
+        },
+        500: {
+          description: 'Terjadi kesalahan saat membuat ringkasan keseluruhan',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
+        }
+      }
+    }
+  },
   '/ai-assistant/speech-to-text/history': {
     get: {
       tags: ['AI Assistant'],

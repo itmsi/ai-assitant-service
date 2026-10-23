@@ -124,6 +124,14 @@ const getById = async (id) => {
 };
 
 /**
+ * Ambil banyak record sekaligus. Error DB dilempar (bukan null) agar tidak dianggap "tidak ditemukan"
+ */
+const getByIds = async (ids) => {
+  const rows = await db('ai_transcriptions').whereIn('id', ids);
+  return rows.map(toRecord);
+};
+
+/**
  * Daftar riwayat per user (tanpa segments/analysis penuh, transkrip dipotong untuk preview)
  */
 const listByUser = async (userId, { page = 1, limit = 20 } = {}) => {
@@ -259,5 +267,6 @@ module.exports = {
   saveTranscription,
   findCached,
   getById,
+  getByIds,
   listByUser,
 };

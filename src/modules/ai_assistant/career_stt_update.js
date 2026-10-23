@@ -5,12 +5,13 @@ const { Logger } = require("../../utils/logger");
 const logger = Logger;
 
 const UPDATE_PATH = "/api/career/applicant_form_contents/update-stt";
+const SUMMARY_ALL_PATH = "/api/career/applicant-forms/summary-all";
 const UPDATE_TIMEOUT = 15000;
 const UPDATE_RETRIES = 3;
 
-const getUpdateUrl = () => {
+const getUpdateUrl = (updatePath = UPDATE_PATH) => {
   const base = (aiConfig.MICROSERVICE_CAREER_URL || "").replace(/\/$/, "");
-  return base ? `${base}${UPDATE_PATH}` : "";
+  return base ? `${base}${updatePath}` : "";
 };
 
 const isUpdateEnabled = () => Boolean(getUpdateUrl());
@@ -68,14 +69,19 @@ const buildSummaryPayload = (record, outcome) => {
 };
 
 /**
- * Kirim hasil job ke api-career (POST /applicant_form_contents/update-stt). Tidak pernah melempar error:
+ * Kirim hasil ke api-career (default POST /applicant_form_contents/update-stt). Tidak pernah melempar error:
  * kegagalan update ke api-career tidak boleh mengubah status job yang sudah selesai.
  * Penerima membalas HTTP 201 + {status:false} saat token salah, jadi keberhasilan dicek dari body.success.
  */
 const postToCareer = async (
   payload,
   token,
-  { label, attempts = UPDATE_RETRIES, timeout = UPDATE_TIMEOUT } = {},
+  {
+    label,
+    attempts = UPDATE_RETRIES,
+    timeout = UPDATE_TIMEOUT,
+    updatePath = UPDATE_PATH,
+  } = {},
 ) => {
   if (!isUpdateEnabled()) return false;
   if (!token) {
@@ -85,7 +91,7 @@ const postToCareer = async (
     return false;
   }
 
-  const url = getUpdateUrl();
+  const url = getUpdateUrl(updatePath);
   const headers = { "Content-Type": "application/json" };
   // Token SSO milik request asal (sama dengan yang dipakai project), diteruskan apa adanya
   headers.Authorization = `Bearer ${token}`;
@@ -132,6 +138,16 @@ const updateSummaryResult = (record, outcome, token) =>
     timeout: 10000,
   });
 
+// Ringkasan keseluruhan kandidat (POST /ai-assistant/summarize-all). Penerima mencari applicant form
+// lewat transcription_id, jadi cukup satu ID dari kandidat yang sama
+const updateSummaryAll = (transcriptionId, summary, token) =>
+  postToCareer({ transcription_id: transcriptionId, summary }, token, {
+    label: `Summary all ${transcriptionId}`,
+    attempts: 2,
+    timeout: 10000,
+    updatePath: SUMMARY_ALL_PATH,
+  });
+
 module.exports = {
   isUpdateEnabled,
   getUpdateUrl,
@@ -139,4 +155,5 @@ module.exports = {
   buildSummaryPayload,
   updateSttResult,
   updateSummaryResult,
+  updateSummaryAll,
 };

@@ -120,6 +120,19 @@ router.post(
 );
 
 /**
+ * @route   POST /api/mosa/ai-assistant/summarize-all
+ * @desc    Ringkasan keseluruhan dari banyak transkrip (satu kandidat), hasil dikirim ke api-career summary-all
+ * @access  Protected (wajib token SSO)
+ * @body    [{ transcription_id: uuid, instruction?: string }] atau { items: [...], output_language?: string }
+ */
+router.post(
+  '/summarize-all',
+  requireClientToken,
+  requireSSOToken,
+  handler.summarizeAllTranscripts
+);
+
+/**
  * @route   GET /api/mosa/ai-assistant/speech-to-text/history
  * @desc    Riwayat speech-to-text milik user
  * @query   page?, limit? (maks 100)

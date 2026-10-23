@@ -1058,8 +1058,116 @@ const summarizeTranscript = async (req, res) => {
   }
 };
 
+const SUMMARIZE_ALL_MAX_ITEMS = 30;
+
+/**
+ * Ringkasan keseluruhan dari banyak transcription_id (jawaban satu kandidat).
+ * Sumbernya transkrip tersimpan di DB, bukan ringkasan per item, supaya detail tidak hilang.
+ * Semua ID wajib ada dan berstatus success; jika tidak, request gagal tanpa memanggil LLM.
+ * Jika sukses, hasil dikirim ke api-career (POST /applicant-forms/summary-all) memakai ID pertama.
+ * Body: [{ transcription_id, instruction? }] atau { items: [...], output_language? }
+ */
+const summarizeAllTranscripts = async (req, res) => {
+  const body = req.body || {};
+  const items = Array.isArray(body) ? body : body.items;
+  const outputLanguage = (Array.isArray(body) ? undefined : body.output_language) || 'id';
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Body harus berupa array berisi minimal satu { transcription_id, instruction? }',
+    });
+  }
+  if (items.length > SUMMARIZE_ALL_MAX_ITEMS) {
+    return res.status(400).json({
+      success: false,
+      message: `Maksimal ${SUMMARIZE_ALL_MAX_ITEMS} item per request`,
+    });
+  }
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i] || {};
+    if (!/^[0-9a-f-]{36}$/i.test(String(item.transcription_id || ''))) {
+      return res.status(400).json({
+        success: false,
+        message: `Item ke-${i + 1}: transcription_id tidak valid`,
+      });
+    }
+    if (item.instruction !== undefined && item.instruction !== null
+      && (typeof item.instruction !== 'string' || item.instruction.length > 2000)) {
+      return res.status(400).json({
+        success: false,
+        message: `Item ke-${i + 1}: instruction harus string maksimal 2000 karakter`,
+      });
+    }
+  }
+  if (!/^[a-z]{2}$/i.test(String(outputLanguage))) {
+    return res.status(400).json({
+      success: false,
+      message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+
+  // ID dan instruksi yang sama cukup dipakai sekali, urutan kiriman dipertahankan
+  const ids = [...new Set(items.map((item) => String(item.transcription_id).toLowerCase()))];
+  const instructions = [...new Set(items
+    .map((item) => (item.instruction || '').trim())
+    .filter(Boolean))];
+  const language = String(outputLanguage).toLowerCase();
+
+  const startedAt = Date.now();
+  try {
+    const records = await transcriptionRepo.getByIds(ids);
+    const byId = new Map(records.map((record) => [String(record.id).toLowerCase(), record]));
+    const invalidIds = ids.filter((id) => {
+      const record = byId.get(id);
+      return !record || record.status !== 'success' || !(record.translation || record.transcript);
+    });
+    if (invalidIds.length > 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sebagian data speech to text tidak ditemukan atau belum selesai',
+        data: { invalid_ids: invalidIds },
+      });
+    }
+
+    const texts = ids.map((id) => {
+      const record = byId.get(id);
+      return record.translation || record.transcript;
+    });
+    const summary = await voiceService.summarizeAll(texts, {
+      outputLanguage: language,
+      instructions,
+    });
+
+    // Gagal kirim ke api-career tidak menggagalkan request; lihat synced_to_career
+    const token = req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+    const syncedToCareer = await careerSttUpdate.updateSummaryAll(ids[0], summary, token);
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Ringkasan keseluruhan berhasil dibuat',
+      data: {
+        summary,
+        synced_to_career: syncedToCareer,
+        output_language: language,
+        transcription_ids: ids,
+        instructions,
+        input_chars: texts.reduce((sum, text) => sum + text.length, 0),
+        processing_ms: Date.now() - startedAt,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error in summarizeAllTranscripts handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(error.status || 500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat membuat ringkasan keseluruhan',
+    });
+  }
+};
+
 module.exports = {
   summarizeTranscript,
+  summarizeAllTranscripts,
   speechToText,
   listTranscriptions,
   getTranscription,
