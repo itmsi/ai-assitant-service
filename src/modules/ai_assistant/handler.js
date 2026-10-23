@@ -999,10 +999,20 @@ const summarizeTranscript = async (req, res) => {
       source = record.translation || record.transcript;
     }
 
-    const summary = await voiceService.summarizeText(source, {
-      outputLanguage: String(outputLanguage).toLowerCase(),
-      instruction: instruction ? instruction.trim() : undefined,
-    });
+    const token = req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+    let summary;
+    try {
+      summary = await voiceService.summarizeText(source, {
+        outputLanguage: String(outputLanguage).toLowerCase(),
+        instruction: instruction ? instruction.trim() : undefined,
+      });
+    } catch (summaryError) {
+      // Kegagalan ringkasan juga dikabarkan ke api-career, lalu error diteruskan ke response
+      if (record) {
+        await careerSttUpdate.updateSummaryResult(record, { error: summaryError.message || String(summaryError) }, token);
+      }
+      throw summaryError;
+    }
 
     let saved = null;
     const requester = getRequester(req);
@@ -1018,8 +1028,7 @@ const summarizeTranscript = async (req, res) => {
     // karena butuh file_link_audio dari record. Gagal di sini tidak menggagalkan request
     let syncedToCareer = false;
     if (record) {
-      const token = req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
-      syncedToCareer = await careerSttUpdate.updateSummaryResult(record, summary, token);
+      syncedToCareer = await careerSttUpdate.updateSummaryResult(record, { summary }, token);
     }
 
     return baseResponseGeneral(res, {
