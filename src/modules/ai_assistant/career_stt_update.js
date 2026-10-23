@@ -138,10 +138,30 @@ const updateSummaryResult = (record, outcome, token) =>
     timeout: 10000,
   });
 
+/**
+ * Body untuk POST /applicant-forms/summary-all (api-career). Status: Success | Failed.
+ * summary tidak dikirim saat gagal, supaya summary_all lama di penerima tidak tertimpa.
+ */
+const buildSummaryAllPayload = (transcriptionId, outcome) => {
+  if (outcome.error) {
+    return {
+      transcription_id: transcriptionId,
+      summary_all_status: "Failed",
+      summary_all_message: `Summary all gagal: ${outcome.error}`,
+    };
+  }
+  return {
+    transcription_id: transcriptionId,
+    summary: outcome.summary,
+    summary_all_status: "Success",
+    summary_all_message: "Summary all berhasil",
+  };
+};
+
 // Ringkasan keseluruhan kandidat (POST /ai-assistant/summarize-all). Penerima mencari applicant form
 // lewat transcription_id, jadi cukup satu ID dari kandidat yang sama
-const updateSummaryAll = (transcriptionId, summary, token) =>
-  postToCareer({ transcription_id: transcriptionId, summary }, token, {
+const updateSummaryAll = (transcriptionId, outcome, token) =>
+  postToCareer(buildSummaryAllPayload(transcriptionId, outcome), token, {
     label: `Summary all ${transcriptionId}`,
     attempts: 2,
     timeout: 10000,
@@ -153,6 +173,7 @@ module.exports = {
   getUpdateUrl,
   buildPayload,
   buildSummaryPayload,
+  buildSummaryAllPayload,
   updateSttResult,
   updateSummaryResult,
   updateSummaryAll,

@@ -31,7 +31,8 @@ const publishSummaryAllJob = async (job) => {
 
 /**
  * Transkrip dibaca ulang dari DB saat diproses, lalu diringkas dan dikirim ke api-career.
- * Kegagalan (LLM, data berubah) hanya dicatat di log; job tidak diulang agar tidak berputar terus.
+ * Kegagalan (LLM, data berubah) dikirim ke api-career sebagai summary_all_status Failed;
+ * job tidak diulang agar tidak berputar terus.
  */
 const processJob = async (job) => {
   const startedAt = Date.now()
@@ -44,7 +45,9 @@ const processJob = async (job) => {
     return record && record.status === 'success' ? (record.translation || record.transcript) : null
   })
   if (texts.some((text) => !text)) {
-    logger.error(`[Summary All Worker] Job ${job.job_id} dibatalkan: sebagian transkrip tidak lagi tersedia`)
+    const message = 'sebagian transkrip tidak lagi tersedia'
+    logger.error(`[Summary All Worker] Job ${job.job_id} dibatalkan: ${message}`)
+    await careerSttUpdate.updateSummaryAll(ids[0], { error: message }, job.token)
     return
   }
 
@@ -56,10 +59,11 @@ const processJob = async (job) => {
     })
   } catch (error) {
     logger.error(`[Summary All Worker] Job ${job.job_id} gagal membuat ringkasan: ${error.message || error}`)
+    await careerSttUpdate.updateSummaryAll(ids[0], { error: error.message || String(error) }, job.token)
     return
   }
 
-  const synced = await careerSttUpdate.updateSummaryAll(ids[0], summary, job.token)
+  const synced = await careerSttUpdate.updateSummaryAll(ids[0], { summary }, job.token)
   logger.info(`[Summary All Worker] Job ${job.job_id} selesai (${Date.now() - startedAt}ms), synced_to_career=${synced}`)
 }
 
