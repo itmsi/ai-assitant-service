@@ -408,7 +408,9 @@ const chatStream = async (req, res) => {
   // Client disconnect handler
   // =========================================
   let isClientConnected = true;
-  req.on('close', () => {
+  // Pakai res 'close': di Node 16+ req 'close' sudah terpicu begitu body request selesai dibaca
+  res.on('close', () => {
+    if (res.writableFinished) return;
     isClientConnected = false;
     logger.info(`[Stream] Client disconnected - ${sessionId || 'new session'}`);
   });

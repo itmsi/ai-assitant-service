@@ -8,6 +8,7 @@ AI Assistant Service untuk Motor Sights International (MSI) yang menggunakan Lar
 - [Features](#-features)
 - [Architecture](#-architecture)
 - [Installation & Setup](#-installation--setup)
+- [AI Console (UI Admin)](#️-ai-console-ui-admin)
 - [Configuration](#-configuration)
 - [API Documentation](#-api-documentation)
 - [Available Modules](#-available-modules)
@@ -24,7 +25,7 @@ AI Assistant Service adalah backend service yang menyediakan kemampuan AI chat u
 - **LangChain** untuk integrasi dengan LLM (OpenAI/Sumopod)
 - **Function Calling** untuk memanggil API internal secara dinamis
 - **Redis** untuk menyimpan conversation history
-- **PostgreSQL** untuk menyimpan system prompts
+- **PostgreSQL** untuk menyimpan system prompts, konfigurasi provider/model AI, dan log pemakaian AI
 - **Express.js** sebagai web framework
 
 ### Use Cases
@@ -45,7 +46,8 @@ AI Assistant Service adalah backend service yang menyediakan kemampuan AI chat u
 - ✅ **Data Summarization**: AI dapat melakukan ringkasan data yang diambil dari API
 - ✅ **User Context via SSO Token**: AI mengenali identitas pengguna lewat JWT/SSO
 - ✅ **Dynamic Prompt Management**: System prompt disimpan di database untuk easy management
-- ✅ **Multiple LLM Support**: Support OpenAI, Sumopod, dan Ollama (future)
+- ✅ **Multiple LLM Support**: Provider OpenAI-compatible apa pun (OpenAI, Sumopod, OpenRouter, dll)
+- ✅ **AI Console**: UI admin untuk mengganti provider, model, dan prompt lewat database tanpa rebuild, dengan fallback antar model dan dashboard monitoring
 
 ### Module Integration
 
@@ -227,6 +229,81 @@ npm start
 
 Server akan berjalan di `http://localhost:9587`
 
+### Alternatif: Docker Compose
+
+```bash
+# Network eksternal yang dipakai compose (sekali saja)
+docker network create infra_net
+
+docker compose up -d --build
+```
+
+| Service | Port |
+|---|---|
+| `api` (REST API + listener RabbitMQ) | 9587 |
+| `ai-assistant` (REST + MCP) | 9588 |
+| `mem0` (memory server) | 9898 |
+
+Untuk development lokal, buat `docker-compose.override.yml` (sudah di-`.gitignore`) untuk mengarahkan DB ke PostgreSQL host
+(`DB_HOST_DEV=host.docker.internal` + `extra_hosts: ["host.docker.internal:host-gateway"]`) serta menambah container Redis/RabbitMQ.
+Pastikan `pg_hba.conf` PostgreSQL mengizinkan subnet network `infra_net`, contoh:
+
+```bash
+echo "host all all 172.21.0.0/16 md5" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
+sudo systemctl reload postgresql
+```
+
+Jalankan migration dari dalam container:
+
+```bash
+docker compose exec api npx knex --knexfile src/knexfile.js migrate:latest
+```
+
+## 🖥️ AI Console (UI Admin)
+
+UI untuk mengatur **provider AI, model AI, dan prompt** langsung dari database — perubahan berlaku tanpa rebuild/restart —
+plus dashboard monitoring pemakaian AI.
+
+### Akses
+
+| Lingkungan | URL |
+|---|---|
+| Lokal (service `api`) | http://localhost:9587/api/mosa/ai-admin/ui/ |
+| Lokal (service `ai-assistant`) | http://localhost:9588/api/mosa/ai-admin/ui/ |
+| Server | `https://<domain-api>/api/mosa/ai-admin/ui/` |
+
+**Login:** username & password diambil dari `.env`:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123   # nilai contoh — WAJIB diganti di server
+```
+
+Token login (JWT, ditandatangani `JWT_SECRET`) berlaku 12 jam. Percobaan login dibatasi 10 kali per 15 menit.
+Mengganti username/password cukup ubah `.env` lalu `docker compose up -d` (tanpa rebuild).
+
+### Halaman
+
+| Halaman | Fungsi |
+|---|---|
+| **Dashboard** | Total panggilan, tingkat sukses, latency, token, urutan model aktif, grafik, error terbaru |
+| **Provider AI** | Tambah/edit/nonaktifkan provider OpenAI-compatible; API key disimpan di DB atau diambil dari variabel `.env`; **Sync model** mengambil daftar model dari provider |
+| **Model AI** | Tambah model, atur kegunaan, priority, temperature, max tokens, timeout; tombol **Tes** |
+| **Prompt** | Edit prompt dengan riwayat versi & tombol kembalikan versi |
+| **Log** | Semua panggilan model (termasuk percobaan fallback yang gagal) |
+| **Pengaturan** | Pilih prompt yang dipakai chat, fallback on/off |
+
+### Cara kerja singkat
+
+- Tiap model punya kegunaan: **Chat asisten** (`/chat`, `/chat/stream`, validasi customer) dan/atau
+  **Analisis transkrip** (terjemahan, ringkasan, analisis, `/summarize`, `/summarize-all`).
+- Model aktif dengan **priority terkecil** dipakai lebih dulu; jika gagal, otomatis mencoba model berikutnya.
+- Jika DB tidak bisa dibaca atau belum ada model aktif, sistem memakai konfigurasi `.env` (`AI_MODEL_PROVIDER`, `SUMOPOD_*`, `OPENAI_*`).
+- Konfigurasi di-cache `AI_CONFIG_CACHE_TTL_MS` (default 15 detik), jadi perubahan berlaku di semua container paling lambat 15 detik.
+- Tabel: `ai_providers`, `ai_models`, `ai_settings`, `ai_prompt_histories`, `ai_logs` (migration `20261025000001_create_ai_providers_models_logs.js`, data awal diisi dari `.env`).
+
+Detail lengkap: [docs/AI_CONSOLE.md](./docs/AI_CONSOLE.md)
+
 ## ⚙️ Configuration
 
 ### AI Model Configuration
@@ -246,11 +323,17 @@ Server akan berjalan di `http://localhost:9587`
 | `AI_ENABLE_FUNCTION_CALLING` | Enable function calling | `true` |
 | `AI_ALLOW_WRITE_ACTIONS` | Allow write operations | `false` |
 | `AI_MAX_CONVERSATION_HISTORY` | Max conversation history | `10` |
-| `AI_SYSTEM_PROMPT_KEY` | Key untuk system prompt di database | `system_prompt_default` |
+| `AI_SYSTEM_PROMPT_KEY` | Key untuk system prompt di database (bisa diganti dari AI Console) | `system_prompt_default` |
+| `AI_CONFIG_CACHE_TTL_MS` | Lama cache konfigurasi AI dari database (ms) | `15000` |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Login AI Console | - |
+
+> Provider & model sekarang diatur dari **AI Console** (database). Variabel `AI_MODEL_PROVIDER`, `SUMOPOD_*`, `OPENAI_*`
+> hanya dipakai sebagai data awal saat migration dan sebagai cadangan jika database tidak tersedia.
 
 ### System Prompt Management
 
-System prompt sekarang disimpan di database (tabel `ai_prompts`). Untuk update prompt:
+System prompt disimpan di database (tabel `ai_prompts`). Cara termudah: edit lewat halaman **Prompt** di
+[AI Console](#️-ai-console-ui-admin) (otomatis menyimpan riwayat versi). Alternatif lewat SQL:
 
 ```sql
 UPDATE ai_prompts 

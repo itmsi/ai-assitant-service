@@ -34,7 +34,10 @@ const limit = process.env.JSON_LIMIT || '1gb'
 app.set('trust proxy', 1);
 app.use(compress()) // gzip compression
 app.use(methodOverride()) // lets you use HTTP verbs
-app.use(xss()) // handler xss attack
+// xss-clean meng-escape karakter HTML di body; endpoint admin AI dikecualikan agar isi prompt
+// (mis. tag <transcript>) tersimpan apa adanya. Endpoint tersebut wajib login admin
+const xssClean = xss()
+app.use((req, res, next) => (req.path.startsWith('/api/mosa/ai-admin') ? next() : xssClean(req, res, next)))
 app.use(express.json({ limit })) // json limit
 app.use(express.urlencoded({ limit, extended: true })) // urlencoded limit
 app.use(cors(corsOptions))

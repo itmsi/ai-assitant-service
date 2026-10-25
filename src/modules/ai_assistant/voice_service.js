@@ -5,6 +5,8 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const aiConfig = require('../../config/ai');
 const { getProviderConfig } = require('./service');
+// Model terjemahan/ringkasan/analisis diambil dari DB (purpose 'analysis')
+const modelRouter = require('./model_router');
 const { Logger } = require('../../utils/logger');
 
 const logger = Logger;
@@ -359,10 +361,8 @@ const transcribe = async ({ buffer, filename }, { language, prompt } = {}) => {
  * Terjemahkan teks ke bahasa target (kode ISO-639-1)
  */
 const translateText = async (text, { from, to }) => {
-  const { openai, config } = getClient();
 
-  const completion = await openai.chat.completions.create({
-    model: aiConfig.STT_ANALYSIS_MODEL || config.model,
+  const completion = await modelRouter.chatCompletion('analysis', {
     temperature: 0,
     messages: [
       {
@@ -384,7 +384,6 @@ const translateText = async (text, { from, to }) => {
  * Analisis transkrip dengan LLM, output JSON terstruktur
  */
 const analyzeTranscript = async (transcript, { instruction, outputLanguage = 'id' } = {}) => {
-  const { openai, config } = getClient();
 
   const systemPrompt = [
     'Kamu adalah analis percakapan suara untuk Motor Sights International (MSI).',
@@ -409,8 +408,7 @@ const analyzeTranscript = async (transcript, { instruction, outputLanguage = 'id
     ? `Instruksi tambahan: ${instruction}\n\nTranskrip:\n${transcript}`
     : `Transkrip:\n${transcript}`;
 
-  const completion = await openai.chat.completions.create({
-    model: aiConfig.STT_ANALYSIS_MODEL || config.model,
+  const completion = await modelRouter.chatCompletion('analysis', {
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
@@ -437,7 +435,6 @@ const analyzeTranscript = async (transcript, { instruction, outputLanguage = 'id
  * Ringkasan singkat dari teks transkrip (teks biasa, bukan JSON)
  */
 const summarizeText = async (text, { outputLanguage = 'id', instruction } = {}) => {
-  const { openai, config } = getClient();
   const lang = `${languageName(outputLanguage)} (ISO-639-1 "${outputLanguage}")`;
 
   // Transkrip berasal dari ucapan orang lain, perlakukan sebagai data, bukan perintah
@@ -462,8 +459,7 @@ const summarizeText = async (text, { outputLanguage = 'id', instruction } = {}) 
     ? `HR instruction:\n${instruction}\n\n<transcript>\n${text}\n</transcript>`
     : text;
 
-  const completion = await openai.chat.completions.create({
-    model: aiConfig.STT_ANALYSIS_MODEL || config.model,
+  const completion = await modelRouter.chatCompletion('analysis', {
     temperature: 0.2,
     messages: [
       { role: 'system', content: system },
@@ -482,7 +478,6 @@ const SUMMARIZE_ALL_MAP_CONCURRENCY = 5;
  * Satu jawaban gabungan dari banyak transkrip milik satu kandidat
  */
 const summarizeCombined = async (texts, { outputLanguage, instructions, partial }) => {
-  const { openai, config } = getClient();
   const lang = `${languageName(outputLanguage)} (ISO-639-1 "${outputLanguage}")`;
   const sourceLabel = partial ? 'per-answer summaries' : 'transcripts';
 
@@ -504,8 +499,7 @@ const summarizeCombined = async (texts, { outputLanguage, instructions, partial 
     .map((text, index) => `<transcript index="${index + 1}">\n${text}\n</transcript>`)
     .join('\n\n');
 
-  const completion = await openai.chat.completions.create({
-    model: aiConfig.STT_ANALYSIS_MODEL || config.model,
+  const completion = await modelRouter.chatCompletion('analysis', {
     temperature: 0.2,
     messages: [
       { role: 'system', content: system },

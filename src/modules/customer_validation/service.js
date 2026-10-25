@@ -1,56 +1,11 @@
-const { ChatOpenAI } = require('@langchain/openai');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const aiConfig = require('../../config/ai');
+const modelRouter = require('../ai_assistant/model_router');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 const axios = require('axios');
 const { pgCore } = require('../../config/database');
 const { setupDblink, executeDblinkQueryWithRetry } = require('../../utils/dblink');
-
-/**
- * Initialize AI model untuk validasi duplikat
- */
-const initializeModel = () => {
-  if (!aiConfig.AI_ENABLED) {
-    throw new Error('AI Assistant is not enabled');
-  }
-
-  if (aiConfig.AI_MODEL_PROVIDER === 'openai') {
-    if (!aiConfig.OPENAI_API_KEY) {
-      throw new Error('OpenAI API key is not configured');
-    }
-
-    return new ChatOpenAI({
-      modelName: aiConfig.OPENAI_MODEL,
-      temperature: 0.0, // Lowest temperature untuk validasi yang ketat dan deterministik
-      maxTokens: aiConfig.OPENAI_MAX_TOKENS,
-      openAIApiKey: aiConfig.OPENAI_API_KEY,
-    });
-  }
-
-  if (aiConfig.AI_MODEL_PROVIDER === 'sumopod') {
-    if (!aiConfig.SUMOPOD_API_KEY) {
-      throw new Error('Sumopod API key belum dikonfigurasi');
-    }
-
-    if (!aiConfig.SUMOPOD_BASE_URL) {
-      throw new Error('Sumopod base URL belum dikonfigurasi');
-    }
-
-    return new ChatOpenAI({
-      modelName: aiConfig.SUMOPOD_MODEL,
-      temperature: 0.0, // Lowest temperature untuk validasi yang deterministik
-      maxTokens: aiConfig.SUMOPOD_MAX_TOKENS,
-      openAIApiKey: aiConfig.SUMOPOD_API_KEY,
-      configuration: {
-        basePath: aiConfig.SUMOPOD_BASE_URL,
-        baseURL: aiConfig.SUMOPOD_BASE_URL,
-      },
-    });
-  }
-
-  throw new Error(`Unsupported AI model provider: ${aiConfig.AI_MODEL_PROVIDER}`);
-};
 
 /**
  * Get customer names from database using dblink utility
@@ -148,18 +103,8 @@ const validateDuplicateCustomers = async (requestCustomerNames, authHeader) => {
       };
     }
 
-    // Initialize AI model
-    let model;
-    try {
-      logger.info('[CUSTOMER_VALIDATION] Initializing AI model...');
-      model = initializeModel();
-      logger.info('[CUSTOMER_VALIDATION] AI model initialized successfully');
-    } catch (aiInitError) {
-      logger.error(`[CUSTOMER_VALIDATION] Failed to initialize AI model: ${aiInitError.message} `);
-      throw new Error(
-        `Gagal menginisialisasi AI model: ${aiInitError.message}.` +
-        `Pastikan AI_ENABLED = true dan konfigurasi AI service benar.`
-      );
+    if (!aiConfig.AI_ENABLED) {
+      throw new Error('Gagal menginisialisasi AI model: AI Assistant is not enabled. Pastikan AI_ENABLED = true.');
     }
 
     // Prepare prompt untuk AI
@@ -212,7 +157,8 @@ Berikan respon dalam format JSON persis seperti yang dijelaskan di system prompt
         new HumanMessage(userPrompt)
       ];
 
-      response = await model.invoke(messages);
+      // Model chat dari DB dengan fallback; temperature 0 untuk validasi yang ketat dan deterministik
+      ({ response } = await modelRouter.invokeLangChain('chat', messages, { overrides: { temperature: 0.0 } }));
       responseContent = response.content || response.text || '';
       logger.info(`[CUSTOMER_VALIDATION] AI response received, length: ${responseContent.length} `);
     } catch (aiError) {

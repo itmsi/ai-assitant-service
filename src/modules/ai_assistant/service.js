@@ -6,14 +6,15 @@ const logger = Logger;
 const { getConversation, saveConversation } = require('../../utils/redis');
 const { getToolsForLangChain, executeTool } = require('./tools');
 const { getActivePromptByKey } = require('./ai_prompts_repository');
-const OpenAI = require('openai');
+const modelRouter = require('./model_router');
 
 // Cache untuk system prompt (untuk menghindari query berulang)
 let systemPromptCache = {
   content: null,
   key: null,
   timestamp: null,
-  TTL: 5 * 60 * 1000, // 5 menit cache
+  // Singkat agar perubahan prompt dari UI admin cepat berlaku di semua container
+  TTL: parseInt(process.env.AI_CONFIG_CACHE_TTL_MS || '15000', 10),
 };
 
 /**
@@ -22,7 +23,9 @@ let systemPromptCache = {
  * @returns {Promise<string>} System prompt content
  */
 const getSystemPrompt = async (key = null) => {
-  const promptKey = key || aiConfig.AI_SYSTEM_PROMPT_KEY;
+  // Key prompt chat bisa diganti dari UI admin (ai_settings.chat_prompt_key)
+  const settings = await modelRouter.getSettings();
+  const promptKey = key || settings.chat_prompt_key || aiConfig.AI_SYSTEM_PROMPT_KEY;
 
   // Check cache first
   if (
@@ -78,65 +81,28 @@ const clearSystemPromptCache = () => {
     content: null,
     key: null,
     timestamp: null,
-    TTL: 5 * 60 * 1000,
+    TTL: systemPromptCache.TTL,
   };
   logger.info('System prompt cache cleared');
 };
 
 /**
- * Initialize AI model
+ * Initialize AI model (provider & model dari database, lihat model_router)
  */
-const initializeModel = () => {
+const initializeModel = async () => {
   if (!aiConfig.AI_ENABLED) {
     throw new Error('AI Assistant is not enabled');
   }
 
-  if (aiConfig.AI_MODEL_PROVIDER === 'openai') {
-    if (!aiConfig.OPENAI_API_KEY) {
-      throw new Error('OpenAI API key is not configured');
-    }
-
-    const model = new ChatOpenAI({
-      modelName: aiConfig.OPENAI_MODEL,
-      temperature: aiConfig.OPENAI_TEMPERATURE,
-      maxTokens: aiConfig.OPENAI_MAX_TOKENS,
-      openAIApiKey: aiConfig.OPENAI_API_KEY,
-    });
-
-    // Return model without binding tools here
-    // We'll handle tools manually during invoke
-    return model;
+  const { model, candidate } = await modelRouter.getLangChainModel('chat');
+  if (!candidate.apiKey) {
+    throw new Error(`API key provider ${candidate.providerCode} belum dikonfigurasi`);
   }
+  logger.debug(`Chat model: ${candidate.providerCode}/${candidate.model}`);
 
-  if (aiConfig.AI_MODEL_PROVIDER === 'sumopod') {
-    if (!aiConfig.SUMOPOD_API_KEY) {
-      throw new Error('Sumopod API key belum dikonfigurasi');
-    }
-
-    if (!aiConfig.SUMOPOD_BASE_URL) {
-      throw new Error('Sumopod base URL belum dikonfigurasi');
-    }
-
-    const model = new ChatOpenAI({
-      modelName: aiConfig.SUMOPOD_MODEL,
-      temperature: aiConfig.SUMOPOD_TEMPERATURE,
-      maxTokens: aiConfig.SUMOPOD_MAX_TOKENS,
-      openAIApiKey: aiConfig.SUMOPOD_API_KEY,
-      configuration: {
-        basePath: aiConfig.SUMOPOD_BASE_URL,
-        baseURL: aiConfig.SUMOPOD_BASE_URL,
-      },
-    });
-
-    return model;
-  }
-
-  // Support for Ollama (future implementation)
-  if (aiConfig.AI_MODEL_PROVIDER === 'ollama') {
-    throw new Error('Ollama provider belum diimplementasikan. Silakan gunakan OpenAI.');
-  }
-
-  throw new Error(`Unsupported AI model provider: ${aiConfig.AI_MODEL_PROVIDER}`);
+  // Return model without binding tools here
+  // We'll handle tools manually during invoke
+  return model;
 };
 
 /**
@@ -286,19 +252,10 @@ const getProviderConfig = () => {
  * @yields {{ type: 'text', content: string } | { type: 'tool_calls', toolCalls: Array }}
  */
 async function* rawStreamChatCompletion(openaiMessages, tools) {
-  const config = getProviderConfig();
-  const openai = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-  });
-
-  const stream = await openai.chat.completions.create({
-    model: config.model,
+  // Provider/model/temperature/max_tokens diambil dari DB, dengan fallback antar model
+  const stream = modelRouter.streamChatCompletion('chat', {
     messages: openaiMessages,
     tools: tools && tools.length > 0 ? tools : undefined,
-    temperature: config.temperature,
-    max_tokens: config.maxTokens,
-    stream: true,
   });
 
   const toolCallAccum = {}; // { [index]: { id, type, function: { name, arguments } } }
@@ -482,8 +439,9 @@ const getMessageContent = (message) => {
  */
 const processChat = async (userMessage, userId, sessionId, authToken, allowedModules) => {
   try {
-    // Initialize model
-    const model = initializeModel();
+    if (!aiConfig.AI_ENABLED) {
+      throw new Error('AI Assistant is not enabled');
+    }
 
     // Get system prompt from database (with fallback)
     let systemPrompt = await getSystemPrompt();
@@ -540,27 +498,14 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
     const messages = convertToLangChainMessages(conversationHistory, systemPrompt, summaryText);
     messages.push(new HumanMessage(userMessage));
 
-    // Prepare model with tools if function calling is enabled
-    let modelToUse = model;
-    let tools = [];
+    // Tools di-bind jika function calling aktif
+    const tools = aiConfig.AI_ENABLE_FUNCTION_CALLING ? getToolsForLangChain(allowedModules) : [];
 
-    if (aiConfig.AI_ENABLE_FUNCTION_CALLING) {
-      tools = getToolsForLangChain(allowedModules);
-      // Convert tools to format compatible with ChatOpenAI
-      // For LangChain 0.1.x, we pass tools in bind or use .bind()
-      try {
-        // Try using bind with tools parameter
-        modelToUse = model.bind({
-          tools: tools,
-        });
-      } catch (error) {
-        logger.warn(`Failed to bind tools, continuing without function calling: ${error.message}`);
-        // Continue without tools if binding fails
-      }
-    }
-
-    // Invoke model
-    let response = await modelToUse.invoke(messages);
+    // Invoke model (provider/model dari DB, fallback ke model berikutnya jika gagal)
+    const invoked = await modelRouter.invokeLangChain('chat', messages, {
+      bind: tools.length ? { tools } : null,
+    });
+    let { response } = invoked;
     let toolCalls = extractToolCalls(response);
 
     // Handle function calls if any
@@ -604,7 +549,7 @@ const processChat = async (userMessage, userId, sessionId, authToken, allowedMod
       }
 
       // Get final response from model with tool results
-      response = await model.invoke(messages);
+      response = await modelRouter.invokeLangChainWith('chat', invoked, messages);
       toolCalls = extractToolCalls(response);
     }
 

@@ -163,6 +163,15 @@ ADMIN_FIRST_NAME=Admin
 ADMIN_LAST_NAME=User
 
 # ===========================================
+# AI Console (UI admin provider/model/prompt: /api/mosa/ai-admin/ui/)
+# Login memakai ADMIN_USERNAME / ADMIN_PASSWORD di atas, token ditandatangani JWT_SECRET
+# ===========================================
+# AI_ADMIN_JWT_SECRET=           # opsional, default JWT_SECRET
+# AI_ADMIN_TOKEN_EXPIRES_IN=12h
+# Lama cache konfigurasi AI dari DB (ms); perubahan dari UI berlaku di semua container paling lambat selama ini
+AI_CONFIG_CACHE_TTL_MS=15000
+
+# ===========================================
 # Redis Configuration (Optional)
 # ===========================================
 REDIS_ENABLED=false

@@ -92,6 +92,11 @@ app.get('/', (req, res) => {
 app.use('/api/mosa/ai-assistant', aiAssistantRoutes);
 
 // =============================================
+// AI Admin (UI monitoring + konfigurasi provider/model/prompt)
+// =============================================
+app.use('/api/mosa/ai-admin', require('../ai_admin'));
+
+// =============================================
 // MCP Endpoint (Streamable HTTP)
 // =============================================
 const mcpRouter = getMCPRouter();

@@ -26,6 +26,10 @@ routing.use(`${API_TAG}/ai-assistant`, aiAssistantModule)
 const customerValidationModule = require('../../modules/customer_validation')
 routing.use(`${API_TAG}/customer-validation`, customerValidationModule)
 
+// AI Admin (UI monitoring + konfigurasi provider/model/prompt)
+const aiAdminModule = require('../../modules/ai_admin')
+routing.use(`${API_TAG}/ai-admin`, aiAdminModule)
+
 // Tambahkan routes module Anda di sini
 // Example:
 // const yourModule = require('../../modules/yourModule')
