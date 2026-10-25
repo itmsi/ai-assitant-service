@@ -2,23 +2,24 @@
 
 AI Assistant Service untuk Motor Sights International (MSI) yang menggunakan Large Language Model (LLM) dengan function calling untuk mengakses data dari berbagai microservice melalui API Gateway.
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Overview](#-overview)
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Installation & Setup](#-installation--setup)
-- [AI Console (UI Admin)](#️-ai-console-ui-admin)
-- [Configuration](#-configuration)
-- [API Documentation](#-api-documentation)
-- [Available Modules](#-available-modules)
-- [Development Guide](#-development-guide)
-- [Troubleshooting](#-troubleshooting)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [Credits](#-credits)
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Installation & Setup](#installation--setup)
+- [AI Console (UI Admin)](#ai-console-ui-admin)
+- [Update / Deploy AI Console](#update--deploy-ai-console-ke-server-existing)
+- [Configuration](#configuration)
+- [API Documentation](#api-documentation)
+- [Available Modules](#available-modules)
+- [Development Guide](#development-guide)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Credits](#credits)
 
-## 🎯 Overview
+## Overview
 
 AI Assistant Service adalah backend service yang menyediakan kemampuan AI chat untuk mengakses dan memproses data dari berbagai module di sistem MSI. Service ini menggunakan:
 
@@ -35,32 +36,32 @@ AI Assistant Service adalah backend service yang menyediakan kemampuan AI chat u
 - Data summarization dan analysis
 - Multi-turn conversation dengan context awareness
 
-## ✨ Features
+## Features
 
 ### Core Features
 
-- ✅ **Natural Query Chat**: Pengguna dapat menanyakan pertanyaan dalam bahasa natural (Bahasa Indonesia)
-- ✅ **Contextual Memory**: AI mengingat percakapan dalam sesi chat (disimpan di Redis)
-- ✅ **Function Calling**: AI dapat memanggil fungsi API internal untuk menjawab pertanyaan
-- ✅ **Multi-source Query**: AI dapat menggabungkan data dari beberapa service sekaligus
-- ✅ **Data Summarization**: AI dapat melakukan ringkasan data yang diambil dari API
-- ✅ **User Context via SSO Token**: AI mengenali identitas pengguna lewat JWT/SSO
-- ✅ **Dynamic Prompt Management**: System prompt disimpan di database untuk easy management
-- ✅ **Multiple LLM Support**: Provider OpenAI-compatible apa pun (OpenAI, Sumopod, OpenRouter, dll)
-- ✅ **AI Console**: UI admin untuk mengganti provider, model, dan prompt lewat database tanpa rebuild, dengan fallback antar model dan dashboard monitoring
+- **Natural Query Chat**: Pengguna dapat menanyakan pertanyaan dalam bahasa natural (Bahasa Indonesia)
+- **Contextual Memory**: AI mengingat percakapan dalam sesi chat (disimpan di Redis)
+- **Function Calling**: AI dapat memanggil fungsi API internal untuk menjawab pertanyaan
+- **Multi-source Query**: AI dapat menggabungkan data dari beberapa service sekaligus
+- **Data Summarization**: AI dapat melakukan ringkasan data yang diambil dari API
+- **User Context via SSO Token**: AI mengenali identitas pengguna lewat JWT/SSO
+- **Dynamic Prompt Management**: System prompt disimpan di database untuk easy management
+- **Multiple LLM Support**: Provider OpenAI-compatible apa pun (OpenAI, Sumopod, OpenRouter, dll)
+- **AI Console**: UI admin untuk mengganti provider, model, dan prompt lewat database tanpa rebuild, dengan fallback antar model dan dashboard monitoring
 
 ### Module Integration
 
-- ✅ **Power BI**: Dashboard, Category, Management
-- ✅ **Quotation**: Manage, Products, Accessory, Term Condition, Customer, Bank Account, Island
-- ✅ **CRM**: Territory, IUP Management, Segmentation, IUP Customers, Transactions, Employee Data Access
-- ✅ **Employee**: Management, Company, Department, Title
-- ✅ **HR**: Candidates, Employees
-- ✅ **eCatalog**: Products
+- **Power BI**: Dashboard, Category, Management
+- **Quotation**: Manage, Products, Accessory, Term Condition, Customer, Bank Account, Island
+- **CRM**: Territory, IUP Management, Segmentation, IUP Customers, Transactions, Employee Data Access
+- **Employee**: Management, Company, Department, Title
+- **HR**: Candidates, Employees
+- **eCatalog**: Products
 
 **Total: 22 specialized tools + 1 generic gateway tool**
 
-## 🏗️ Architecture
+## Architecture
 
 ### Alur Proses (8 Langkah)
 
@@ -128,7 +129,7 @@ User
    - Environment variables
    - Fallback prompts
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 
@@ -202,9 +203,13 @@ AI_SYSTEM_PROMPT_KEY=system_prompt_default
 # Run migrations
 npm run migrate
 
-# Run seeders (untuk insert default system prompt)
+# Seeder HANYA untuk database baru/kosong (insert default system prompt)
 npm run seed
 ```
+
+> **Peringatan: jangan jalankan `npm run seed` di database yang sudah berisi data.** Seeder `0001_examples_seeder` menghapus
+> isi tabel `examples`, dan `0002_ai_prompts_seeder` **menimpa isi `system_prompt_default`** dengan versi bawaan
+> (prompt yang sudah diedit, termasuk dari AI Console, akan hilang tanpa riwayat).
 
 ### Step 5: Start Redis
 
@@ -259,7 +264,7 @@ Jalankan migration dari dalam container:
 docker compose exec api npx knex --knexfile src/knexfile.js migrate:latest
 ```
 
-## 🖥️ AI Console (UI Admin)
+## AI Console (UI Admin)
 
 UI untuk mengatur **provider AI, model AI, dan prompt** langsung dari database — perubahan berlaku tanpa rebuild/restart —
 plus dashboard monitoring pemakaian AI.
@@ -304,7 +309,135 @@ Mengganti username/password cukup ubah `.env` lalu `docker compose up -d` (tanpa
 
 Detail lengkap: [docs/AI_CONSOLE.md](./docs/AI_CONSOLE.md)
 
-## ⚙️ Configuration
+## Update / Deploy AI Console ke Server Existing
+
+Panduan untuk server yang **sudah berjalan** (data existing tetap aman). Cukup **migration**, **tanpa seeder**.
+
+### Ringkasan
+
+| Langkah | Perlu? | Keterangan |
+|---|---|---|
+| Pull kode + rebuild image | Ya | UI & API admin ikut di image (tidak ada build frontend terpisah) |
+| Migration | Ya, sekali | Membuat 5 tabel baru + data awal dari `.env` |
+| Seeder (`npm run seed`) | **Tidak** | Data awal sudah diisi oleh migration. Seeder existing justru menimpa prompt & menghapus `examples` |
+| Ubah `.env` | Disarankan | Tidak ada variabel wajib baru; ganti `ADMIN_PASSWORD` (lihat [bagian .env](#yang-perlu-diupdate-di-env)) |
+
+### Kenapa aman untuk proses existing
+
+- Migration **hanya menambah tabel baru** (`ai_providers`, `ai_models`, `ai_settings`, `ai_prompt_histories`, `ai_logs`).
+  Tabel existing (`ai_prompts`, `ai_conversations`, `ai_transcriptions`, `ai_memories`, dll) **tidak diubah**.
+- Data awal provider/model diambil dari `.env` server saat migration, sehingga model yang dipakai **sama persis** dengan sebelumnya
+  (contoh: chat `SUMOPOD_MODEL`, analisis `STT_ANALYSIS_MODEL`, provider sesuai `AI_MODEL_PROVIDER`).
+- Prompt chat tetap memakai `system_prompt_default` yang sudah ada (tidak ditimpa).
+- Jika image baru sudah jalan tapi migration **belum** dijalankan, AI tetap berjalan memakai konfigurasi `.env`
+  (fallback otomatis), jadi urutan deploy tidak menyebabkan downtime.
+
+### Yang perlu diupdate di `.env`
+
+**Tidak ada variabel wajib baru.** AI Console memakai variabel yang umumnya sudah ada:
+
+| Variabel | Status | Keterangan |
+|---|---|---|
+| `ADMIN_USERNAME` | Sudah ada | Username login AI Console |
+| `ADMIN_PASSWORD` | **Ganti** | Default contoh `admin123` — wajib diganti di server. Jika kosong, login AI Console dinonaktifkan |
+| `JWT_SECRET` | Sudah ada | Untuk menandatangani token login AI Console. Wajib terisi |
+| `AI_ADMIN_JWT_SECRET` | Opsional (baru) | Secret khusus AI Console agar terpisah dari `JWT_SECRET` |
+| `AI_ADMIN_TOKEN_EXPIRES_IN` | Opsional (baru) | Masa berlaku login, default `12h` |
+| `AI_CONFIG_CACHE_TTL_MS` | Opsional (baru) | Jeda perubahan dari UI berlaku di container lain, default `15000` (15 detik) |
+
+Contoh tambahan di `.env` server:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=<password-kuat>
+# opsional
+# AI_ADMIN_JWT_SECRET=<random-panjang>
+# AI_CONFIG_CACHE_TTL_MS=15000
+```
+
+> **Jangan hapus** variabel AI lama (`AI_MODEL_PROVIDER`, `SUMOPOD_API_KEY`, `SUMOPOD_BASE_URL`, `SUMOPOD_MODEL`,
+> `STT_ANALYSIS_MODEL`, `OPENAI_*`). Variabel ini dipakai: (1) sebagai data awal saat migration, (2) sebagai sumber
+> API key — provider hasil migration membaca key dari `SUMOPOD_API_KEY` / `OPENAI_API_KEY` (kolom "Env API key"),
+> dan (3) sebagai cadangan jika database tidak bisa dibaca. Mengganti model setelah ini cukup dari UI, bukan `.env`.
+
+Setelah mengubah `.env`, cukup `docker compose up -d api ai-assistant` (tanpa rebuild).
+
+### Langkah deploy
+
+```bash
+# 1. Masuk ke folder deploy di server, ambil kode terbaru
+cd /deployment/public_html/<folder-ai-assistant>/
+git pull origin develop            # atau main untuk production
+
+# 2. (Disarankan) ganti password admin di .env
+#    ADMIN_USERNAME=admin
+#    ADMIN_PASSWORD=<password-kuat>
+#    Opsional: AI_CONFIG_CACHE_TTL_MS=15000
+
+# 3. Rebuild & restart container
+docker compose up -d --build api ai-assistant
+
+# 4. Jalankan migration (sekali). Wajib dari DALAM container agar data awal memakai .env server
+docker compose exec api npx knex --knexfile src/knexfile.js migrate:latest
+#    Output yang diharapkan: "Batch N run: 1 migrations"
+#    Jika muncul "Already up to date" → migration sudah pernah dijalankan, tidak perlu apa-apa
+```
+
+> Jangan jalankan migration dari laptop/host yang `.env`-nya berbeda dengan server: data awal provider/model
+> diambil dari `.env` tempat perintah dijalankan.
+
+### Verifikasi setelah deploy
+
+1. Cek migration tercatat:
+   ```bash
+   docker compose exec api npx knex --knexfile src/knexfile.js migrate:list
+   # 20261025000001_create_ai_providers_models_logs.js harus ada di daftar "Completed"
+   ```
+2. Buka `https://<domain-api>/api/mosa/ai-admin/ui/`, login dengan `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+3. Di **Dashboard → Urutan model**, pastikan model chat & analisis sama dengan sebelumnya dan **tidak** ada peringatan
+   "memakai konfigurasi .env".
+4. Di **Model AI**, klik **Tes** pada model utama → harus `OK`.
+5. Kirim satu chat dari aplikasi → muncul di halaman **Log**.
+
+> Jika UI menampilkan **"Database tidak bisa dihubungi: no pg_hba.conf entry…"**, PostgreSQL belum mengizinkan subnet
+> Docker container. Tambahkan rule di `pg_hba.conf` server, contoh untuk network `infra_net`:
+> ```bash
+> docker network inspect infra_net -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'   # cek subnet, mis. 172.21.0.0/16
+> echo "host all all 172.21.0.0/16 md5" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
+> sudo systemctl reload postgresql
+> ```
+> Jalankan di terminal biasa (perintah `sudo` meminta password).
+
+> Jika domain melewati reverse proxy / API gateway yang hanya meneruskan path tertentu, tambahkan route untuk
+> `/api/mosa/ai-admin/` (termasuk `/api/mosa/ai-admin/ui/`).
+
+### Update berikutnya (hanya perubahan UI/kode AI Console)
+
+UI berupa file statis di dalam image (`src/modules/ai_admin/ui/`), jadi cukup:
+
+```bash
+git pull origin develop
+docker compose up -d --build api ai-assistant
+```
+
+Migration hanya perlu dijalankan lagi jika ada file migration baru (`migrate:latest` aman diulang; jika tidak ada
+yang baru, outputnya "Already up to date"). **Seeder tidak pernah diperlukan** untuk AI Console.
+
+### Rollback
+
+```bash
+# Kembali ke kode sebelumnya
+git checkout <commit-sebelumnya> && docker compose up -d --build api ai-assistant
+
+# (Opsional) hapus tabel AI Console — sistem kembali memakai konfigurasi .env
+docker compose exec api npx knex --knexfile src/knexfile.js migrate:rollback
+```
+
+> `migrate:rollback` membatalkan **batch terakhir**. Pastikan batch terakhir hanya berisi migration AI Console
+> (cek dengan `migrate:list`) sebelum menjalankannya. Rollback menghapus juga log & riwayat prompt AI Console;
+> isi tabel `ai_prompts` tidak terpengaruh.
+
+## Configuration
 
 ### AI Model Configuration
 
@@ -333,7 +466,7 @@ Detail lengkap: [docs/AI_CONSOLE.md](./docs/AI_CONSOLE.md)
 ### System Prompt Management
 
 System prompt disimpan di database (tabel `ai_prompts`). Cara termudah: edit lewat halaman **Prompt** di
-[AI Console](#️-ai-console-ui-admin) (otomatis menyimpan riwayat versi). Alternatif lewat SQL:
+[AI Console](#ai-console-ui-admin) (otomatis menyimpan riwayat versi). Alternatif lewat SQL:
 
 ```sql
 UPDATE ai_prompts 
@@ -346,7 +479,7 @@ WHERE key = 'system_prompt_default'
 
 Lihat dokumentasi lengkap di [AI_PROMPTS_DATABASE.md](./AI_PROMPTS_DATABASE.md)
 
-## 📡 API Documentation
+## API Documentation
 
 ### Base URL
 
@@ -430,7 +563,7 @@ Mengambil riwayat percakapan berdasarkan session ID.
 
 Menghapus riwayat percakapan berdasarkan session ID.
 
-## 📦 Available Modules
+## Available Modules
 
 ### Power BI Module
 
@@ -491,7 +624,7 @@ Menghapus riwayat percakapan berdasarkan session ID.
 
 Lihat dokumentasi lengkap di [MODULE_IMPLEMENTATION_SUMMARY.md](./MODULE_IMPLEMENTATION_SUMMARY.md)
 
-## 🛠️ Development Guide
+## Development Guide
 
 ### Menambah Module Baru
 
@@ -563,7 +696,7 @@ npm run seed:make <name>  # Create new seeder
 npm test               # Run tests
 ```
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -624,14 +757,14 @@ DEBUG_ENABLED=true
 
 Check logs di `logs/application/`
 
-## 📚 Additional Documentation
+## Additional Documentation
 
 - [Alur Proses AI Assistant](./ALUR_PROSES_AI_ASSISTANT.md) - Detail alur proses 8 langkah
 - [Module Implementation Summary](./MODULE_IMPLEMENTATION_SUMMARY.md) - Dokumentasi semua module
 - [AI Prompts Database](./AI_PROMPTS_DATABASE.md) - System prompt management
 - [Update Status](./UPDATE_STATUS.md) - Status update implementasi
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Silakan buat pull request atau issue untuk saran dan perbaikan.
 
@@ -643,14 +776,14 @@ Contributions are welcome! Silakan buat pull request atau issue untuk saran dan 
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open Pull Request
 
-## 📄 License
+## License
 
 MIT License - lihat file [LICENSE](./LICENSE) untuk detail.
 
-## 👨‍💻 Credits
+## Credits
 
 **Developed by [abdulfalaq5](https://github.com/abdulfalaq5)**
 
 ---
 
-Made with ❤️ for Motor Sights International
+Dibuat untuk Motor Sights International
