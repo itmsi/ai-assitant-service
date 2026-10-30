@@ -26,6 +26,10 @@ routing.use(`${API_TAG}/ai-assistant`, aiAssistantModule)
 const customerValidationModule = require('../../modules/customer_validation')
 routing.use(`${API_TAG}/customer-validation`, customerValidationModule)
 
+// Answer Grading Module (penilaian jawaban oleh AI)
+const answerGradingModule = require('../../modules/answer_grading')
+routing.use(`${API_TAG}/answer-grading`, answerGradingModule)
+
 // Tambahkan routes module Anda di sini
 // Example:
 // const yourModule = require('../../modules/yourModule')

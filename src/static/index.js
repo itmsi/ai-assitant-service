@@ -28,6 +28,7 @@ const servers = [
 const aiAssistantSchema = require('./schema/ai_assistant');
 const customerValidationSchema = require('./schema/customer_validation');
 const memorySchema = require('./schema/memory');
+const answerGradingSchema = require('./schema/answer_grading');
 
 // Import paths
 // Tambahkan path module Anda di sini
@@ -35,6 +36,7 @@ const memorySchema = require('./schema/memory');
 const aiAssistantPaths = require('./path/ai_assistant');
 const customerValidationPaths = require('./path/customer_validation');
 const memoryPaths = require('./path/memory');
+const answerGradingPaths = require('./path/answer_grading');
 
 // Combine all schemas
 const schemas = {
@@ -42,6 +44,7 @@ const schemas = {
   ...aiAssistantSchema,
   ...customerValidationSchema,
   ...memorySchema,
+  ...answerGradingSchema,
   // ...yourModuleSchema,
 };
 
@@ -51,6 +54,7 @@ const paths = {
   ...aiAssistantPaths,
   ...customerValidationPaths,
   ...memoryPaths,
+  ...answerGradingPaths,
   // ...yourModulePaths,
 };
 
