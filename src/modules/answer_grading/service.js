@@ -110,11 +110,6 @@ const toStringList = (value) =>
     ? value.filter((item) => typeof item === 'string' && item.trim() !== '').map((item) => item.trim())
     : [];
 
-const roundTo = (value, digits) => {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-};
-
 const aiError = (message) => {
   const error = new Error(message);
   error.code = 'AI_SERVICE_ERROR';
@@ -193,9 +188,9 @@ const gradeAnswer = async ({ question, employeeAnswer, adminAnswer, maxPoints })
   const result = parseModelResult(content);
 
   return {
-    score: roundTo((maxPoints * result.percentage) / 100, 2),
+    score: Math.round((maxPoints * result.percentage) / 100),
     max_score: maxPoints,
-    percentage: roundTo(result.percentage, 2),
+    percentage: Math.round(result.percentage),
     feedback: result.feedback,
     strengths: result.strengths,
     missing: result.missing,
