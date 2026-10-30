@@ -38,13 +38,13 @@ const answerGradingSchemas = {
     type: 'object',
     properties: {
       score: {
-        type: 'number',
-        description: 'Skor akhir = max_score x percentage / 100, dibulatkan 2 desimal',
+        type: 'integer',
+        description: 'Skor akhir = max_score x percentage / 100, dibulatkan ke bilangan bulat (tanpa koma)',
         example: 4
       },
       max_score: { type: 'number', description: 'Sama dengan max_points pada request', example: 5 },
       percentage: {
-        type: 'number',
+        type: 'integer',
         minimum: 0,
         maximum: 100,
         description: 'Persentase kesesuaian jawaban dengan kunci admin menurut AI',
