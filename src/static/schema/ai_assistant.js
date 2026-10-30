@@ -159,6 +159,217 @@ const aiAssistantSchemas = {
       message: { type: 'string', example: 'Daftar riwayat percakapan berhasil diambil' },
       data: { $ref: '#/components/schemas/AiHistoryListResponseData' }
     }
+  },
+  AiSpeechToTextRequest: {
+    type: 'object',
+    required: ['audio_url'],
+    properties: {
+      audio_url: {
+        type: 'string',
+        format: 'uri',
+        description: 'Link file audio (http/https, host publik). Format: mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, flac. Maks 25MB',
+        example: 'https://example.com/rekaman.mp3'
+      },
+      language: {
+        type: 'string',
+        description: 'Opsional. Kode bahasa ISO-639-1 (id, en, zh). Jika kosong dideteksi otomatis',
+        example: 'id'
+      },
+      include_segments: {
+        type: 'boolean',
+        default: false,
+        description: 'Opsional. true = sertakan teks per segmen dengan timestamp start/end (detik)'
+      },
+      analyze: {
+        type: 'boolean',
+        default: false,
+        description: 'Opsional. true = tambahkan analisis AI pada field `analysis`'
+      },
+      summarize: {
+        type: 'boolean',
+        default: true,
+        description: 'Opsional, default true. Ringkasan singkat (2-4 kalimat) dari transkrip dibuat otomatis pada field `summary`, ditulis dalam output_language jika dikirim, jika tidak dalam bahasa audio. Kirim false untuk melewatinya (lebih cepat dan hemat biaya). Jika pembuatan ringkasan gagal, transkrip tetap dikembalikan dengan summary null'
+      },
+      instruction: {
+        type: 'string',
+        maxLength: 1000,
+        description: 'Opsional, hanya dipakai jika analyze=true. Pertanyaan/instruksi analisis tambahan, jawabannya di `analysis.custom_answer`',
+        example: 'Apakah customer menyetujui penawaran?'
+      },
+      async: {
+        type: 'boolean',
+        default: false,
+        description: 'Opsional. true = proses lewat antrian RabbitMQ: langsung dibalas 202 + id dengan status pending, lalu ambil hasilnya lewat GET /speech-to-text/{id}. Butuh RABBITMQ_ENABLED=true. Jika hasil identik sudah ada di cache, tetap dibalas 200 langsung'
+      },
+      force_refresh: {
+        type: 'boolean',
+        default: false,
+        description: 'Opsional. true = abaikan cache dan proses ulang. Default: request identik (user + audio_url + language + output_language + analyze + instruction) dalam 24 jam (STT_CACHE_TTL_HOURS) diambil dari DB'
+      },
+      output_language: {
+        type: 'string',
+        description: 'Opsional. Kode ISO-639-1 bahasa output (id, en, zh). Bahasa audio dideteksi otomatis oleh AI; jika berbeda dari output_language, teks diterjemahkan ke field `translation`. Jika sama, tidak diterjemahkan. Jika diisi dan analyze=true, hasil analisis juga memakai bahasa ini',
+        example: 'en'
+      }
+    },
+    example: {
+      audio_url: 'https://example.com/rekaman.mp3',
+      language: 'id'
+    }
+  },
+  AiSpeechToTextSegment: {
+    type: 'object',
+    properties: {
+      start: { type: 'number', example: 0.0 },
+      end: { type: 'number', example: 4.2 },
+      text: { type: 'string', example: 'Selamat pagi pak,' }
+    }
+  },
+  AiSpeechToTextAnalysis: {
+    type: 'object',
+    nullable: true,
+    description: 'Hanya terisi jika analyze=true',
+    properties: {
+      summary: { type: 'string' },
+      key_points: { type: 'array', items: { type: 'string' } },
+      action_items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            task: { type: 'string' },
+            owner: { type: 'string', nullable: true },
+            due: { type: 'string', nullable: true }
+          }
+        }
+      },
+      topics: { type: 'array', items: { type: 'string' } },
+      sentiment: { type: 'string', enum: ['positive', 'neutral', 'negative', 'mixed'] },
+      participants: { type: 'array', items: { type: 'string' } },
+      custom_answer: { type: 'string', nullable: true }
+    }
+  },
+  AiSpeechToTextResponseData: {
+    type: 'object',
+    properties: {
+      status: { type: 'string', enum: ['pending', 'processing', 'success', 'failed'], description: 'Status job. Mode sinkron selalu success; mode async mulai dari pending' },
+      error_message: { type: 'string', description: 'Alasan gagal, hanya muncul jika status=failed' },
+      id: { type: 'string', format: 'uuid', nullable: true, description: 'ID record di riwayat (dipakai untuk GET /speech-to-text/{id}). null jika gagal disimpan' },
+      cached: { type: 'boolean', description: 'true jika hasil diambil dari cache DB, bukan diproses ulang', example: false },
+      created_at: { type: 'string', format: 'date-time', description: 'Waktu record dibuat (pada detail/cache hit)' },
+      audio_url: { type: 'string', example: 'https://example.com/rekaman.mp3' },
+      size_bytes: { type: 'integer', example: 482133 },
+      language: { type: 'string', nullable: true, description: 'Bahasa audio hasil deteksi AI (ISO-639-1)', example: 'id' },
+      output_language: { type: 'string', nullable: true, description: 'Bahasa output yang diminta (null jika tidak dikirim)', example: 'en' },
+      translated: { type: 'boolean', description: 'true jika output_language berbeda dari bahasa terdeteksi sehingga diterjemahkan', example: true },
+      translation: { type: 'string', nullable: true, description: 'Hasil terjemahan transcript ke output_language. null jika tidak perlu diterjemahkan', example: 'Hello, my name is Adam...' },
+      duration: { type: 'number', nullable: true, example: 42.3 },
+      transcript: {
+        type: 'string',
+        example: 'Selamat pagi pak, saya mau menanyakan penawaran unit...'
+      },
+      segments: {
+        type: 'array',
+        description: 'Hanya muncul jika include_segments=true',
+        items: { $ref: '#/components/schemas/AiSpeechToTextSegment' }
+      },
+      summary_update: {
+        type: 'string',
+        nullable: true,
+        description: 'Ringkasan hasil perintah HRD lewat POST /ai-assistant/summarize (transcription_id). Terpisah dari summary',
+        example: 'Kelebihan: pengalaman management trainee di bidang sales.'
+      },
+      summary_updated_by_id: { type: 'string', nullable: true, description: 'ID pengguna (dari token login MSI) yang terakhir membuat summary_update' },
+      summary_updated_by_name: { type: 'string', nullable: true, description: 'Nama pengguna yang terakhir membuat summary_update' },
+      summary: {
+        type: 'string',
+        nullable: true,
+        description: 'Ringkasan transkrip otomatis. Terisi kecuali summarize=false atau pembuatan ringkasan gagal',
+        example: 'Adam memperkenalkan diri sebagai lulusan baru Universitas Jayabaya yang kini berkarier sebagai management trainee di bidang sales.'
+      },
+      analysis: { $ref: '#/components/schemas/AiSpeechToTextAnalysis' },
+      processing_ms: { type: 'integer', example: 3120 }
+    }
+  },
+  AiSummarizeRequest: {
+    type: 'object',
+    description: 'Jalur utama: transcription_id dari hasil speech-to-text yang sudah ada. text hanya alternatif jika tidak punya transcription_id. Isi salah satu, bukan keduanya',
+    properties: {
+      transcription_id: {
+        type: 'string',
+        format: 'uuid',
+        description: 'UTAMA. ID hasil speech-to-text yang sudah ada (status harus success; didapat dari respons speech-to-text atau GET /speech-to-text/history). Yang diringkas terjemahannya jika ada, jika tidak transkrip aslinya. Hasil ringkasan disimpan ke kolom summary_update beserta ID dan nama pembuat dari token login',
+        example: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d'
+      },
+      instruction: {
+        type: 'string',
+        maxLength: 2000,
+        description: 'Opsional. Perintah bebas dari HRD. Jika kosong, hasilnya ringkasan umum 2-4 kalimat. Jika diisi, jawaban mengikuti perintah dan hanya berdasarkan isi transkrip',
+        example: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'
+      },
+      output_language: {
+        type: 'string',
+        default: 'id',
+        description: 'Kode bahasa ISO-639-1 untuk hasil (id, en, zh)'
+      },
+      text: {
+        type: 'string',
+        maxLength: 50000,
+        description: 'ALTERNATIF. Teks yang akan diringkas langsung, dipakai jika tidak punya transcription_id. Hasilnya hanya dikembalikan dan TIDAK disimpan',
+        example: 'Halo, perkenalkan nama saya Adam, saya lulusan baru dari Universitas Jayabaya...'
+      }
+    },
+    example: {
+      transcription_id: '3f2b1c0e-8a4d-4c1a-9b5e-1d2f3a4b5c6d',
+      instruction: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin',
+      output_language: 'id'
+    }
+  },
+  AiSummarizeResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Ringkasan berhasil dibuat' },
+      data: {
+        type: 'object',
+        properties: {
+          synced_to_career: { type: 'boolean', description: 'true jika summary_update berhasil diteruskan ke api-career (POST /applicant_form_contents/update-stt). Hanya untuk transcription_id; false jika memakai text, api-career tidak aktif, atau gagal' },
+          saved: { type: 'boolean', description: 'true jika hasil tersimpan ke summary_update. Hanya mungkin saat memakai transcription_id; false jika memakai text, atau penyimpanan gagal' },
+          summary_updated_by_id: { type: 'string', nullable: true, example: 'f0b57258-5f33-4e03-81f7-cd70d833b5c5' },
+          summary_updated_by_name: { type: 'string', nullable: true, example: 'Rina HRD' },
+          summary: { type: 'string', description: 'Hasil ringkasan/jawaban. Bisa berisi format markdown (mis. **tebal**, poin) jika perintah HRD meminta daftar' },
+          output_language: { type: 'string', example: 'id' },
+          source: { type: 'string', enum: ['text', 'transcription'] },
+          transcription_id: { type: 'string', format: 'uuid', nullable: true },
+          input_chars: { type: 'integer', example: 540 },
+          processing_ms: { type: 'integer', example: 2100 }
+        }
+      }
+    }
+  },
+  AiSpeechToTextQueuedResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Speech to text diterima dan masuk antrian' },
+      data: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          status: { type: 'string', enum: ['pending', 'processing'], example: 'pending' },
+          audio_url: { type: 'string' },
+          queued: { type: 'boolean', example: true }
+        }
+      }
+    }
+  },
+  AiSpeechToTextResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Speech to text berhasil diproses' },
+      data: { $ref: '#/components/schemas/AiSpeechToTextResponseData' }
+    }
   }
 };
 

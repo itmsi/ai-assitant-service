@@ -70,7 +70,7 @@ const getConversation = async (sessionId, userId) => {
   try {
     // Try with ownership check first
     let conversation = null;
-    if (userId && userId !== 'anonymous') {
+    if (userId) {
       conversation = await db('ai_conversations')
         .where({ session_id: sessionId, user_id: userId })
         .first();

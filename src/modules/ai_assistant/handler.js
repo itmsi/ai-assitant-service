@@ -11,15 +11,30 @@ const { getConversation, saveConversation } = require('../../utils/redis');
 const conversationRepo = require('./ai_conversations_repository');
 const { getToolsForLangChain, executeTool } = require('./tools');
 const aiConfig = require('../../config/ai');
+const voiceService = require('./voice_service');
+const transcriptionRepo = require('./ai_transcriptions_repository');
+const crypto = require('crypto');
+const sttListener = require('../../listeners/stt_listener');
+const summaryAllListener = require('../../listeners/summary_all_listener');
+const careerSttUpdate = require('./career_stt_update');
 const { Logger } = require('../../utils/logger');
 const logger = Logger;
 
+// Memory Service — async extraction setelah chat response
+let memoryService = null;
+try {
+  memoryService = require('./memory/memoryService');
+} catch (err) {
+  // Memory module belum tersedia — skip
+}
+
 /**
  * Helper: extract userId dari req.user (dari SSO middleware)
+ * Returns null jika tidak ada token/user yang valid
  */
 const getUserId = (req) => {
-  if (!req.user) return 'anonymous';
-  return req.user.sub || req.user.userId || req.user.id || req.user.employee_id || req.user.username || 'anonymous';
+  if (!req.user) return null;
+  return req.user.sub || req.user.userId || req.user.id || req.user.employee_id || req.user.username || null;
 };
 
 /**
@@ -51,6 +66,11 @@ const chat = async (req, res) => {
       finalSessionId = `session_${userId}_${Date.now()}`;
     }
 
+    // 🔥 Auto-provision profile memories dari token (hanya sekali per user)
+    if (memoryService && req.user && userId) {
+      await memoryService.provisionUserProfile(req.user, userId);
+    }
+
     // Process chat
     const result = await processChat(
       message.trim(),
@@ -60,7 +80,8 @@ const chat = async (req, res) => {
       system // Pass system modules access list (undefined if not provided)
     );
 
-    return baseResponseGeneral(res, {
+    // Kirim response ke user duluan
+    baseResponseGeneral(res, {
       success: true,
       message: 'Chat berhasil diproses',
       data: {
@@ -69,6 +90,23 @@ const chat = async (req, res) => {
         conversationHistory: result.conversationHistory,
       },
     });
+
+    // 🔥 Async memory extraction — fire & forget, tidak nge-block response user
+    if (memoryService && userId) {
+      memoryService.runExtraction(message.trim(), userId)
+        .then(saved => {
+          if (saved.length > 0) {
+            logger.info(`[Memory] ✅ ${saved.length} memories saved for user ${userId}`);
+          } else {
+            logger.info(`[Memory] ⏭️  Nothing to save for user ${userId}`);
+          }
+        })
+        .catch(err => {
+          logger.warn(`[Memory] Async extraction error: ${err.message}`);
+        });
+    }
+
+    return;
   } catch (error) {
     logger.error(`Error in chat handler: ${error.message || error}`);
     return baseResponseGeneral(res.status(500), {
@@ -159,11 +197,10 @@ const listByUser = async (req, res) => {
   try {
     const userId = req.body?.user_id || getUserId(req);
 
-    if (!userId || userId === 'anonymous') {
+    if (!userId) {
       return baseResponseGeneral(res, {
-        success: true,
-        message: 'User tidak terautentikasi, tidak ada riwayat',
-        data: { userId: 'anonymous', total: 0, conversations: [] },
+        success: false,
+        message: 'User tidak terautentikasi — token tidak valid atau tidak ada',
       });
     }
 
@@ -379,7 +416,30 @@ const chatStream = async (req, res) => {
   const finalSessionId = sessionId || `session_${userId}_${Date.now()}`;
 
   try {
+    // 🔥 Auto-provision profile memories dari token (hanya sekali per user)
+    if (memoryService && req.user && userId) {
+      try {
+        await memoryService.provisionUserProfile(req.user, userId);
+      } catch (err) {
+        logger.debug(`[Memory] Stream auto-provision skipped: ${err.message}`);
+      }
+    }
+
     let systemPrompt = await getSystemPrompt();
+
+    // 🔥 Inject user memories ke prompt (jika ada)
+    // Mem0 semantic search — pakai pesan user sebagai query agar relevan
+    try {
+      const memoryService = require('./memory/memoryService');
+      const memories = await memoryService.getRelevantMemories(userId, message);
+      if (memories && memories.length > 0) {
+        const memoryText = memoryService.formatMemoriesForPrompt(memories);
+        systemPrompt += memoryText;
+        logger.info(`[Memory] Stream: Injected ${memories.length} memories into prompt`);
+      }
+    } catch (err) {
+      logger.debug(`[Memory] Stream injection skipped: ${err.message}`);
+    }
 
     // Build access control if provided
     if (Array.isArray(system)) {
@@ -389,7 +449,7 @@ const chatStream = async (req, res) => {
     // Load conversation history
     let conversationHistory = [];
     try {
-      conversationHistory = await getConversation(userId, sessionId) || [];
+      conversationHistory = await getConversation(userId, finalSessionId) || [];
     } catch { conversationHistory = []; }
 
     // Summarize if needed
@@ -493,7 +553,7 @@ const chatStream = async (req, res) => {
 
         try {
           logger.info(`[Stream] Executing tool: ${toolCall.name}`, toolCall.args);
-          const result = await executeTool(toolCall.name, toolCall.args || {}, authToken);
+          const result = await executeTool(toolCall.name, toolCall.args || {}, authToken, null, userId);
 
           openaiMessages.push({
             role: 'tool',
@@ -542,6 +602,21 @@ const chatStream = async (req, res) => {
       logger.warn(`[Stream] Failed to save conversation ${finalSessionId}: ${saveError.message}`);
     }
 
+    // 🔥 Async memory extraction — fire & forget setelah stream selesai
+    if (memoryService && userId) {
+      memoryService.runExtraction(message.trim(), userId)
+        .then(saved => {
+          if (saved.length > 0) {
+            logger.info(`[Memory] ✅ Stream: ${saved.length} memories saved for user ${userId}`);
+          } else {
+            logger.info(`[Memory] ⏭️  Stream: nothing to save for user ${userId}`);
+          }
+        })
+        .catch(err => {
+          logger.warn(`[Memory] Stream extraction error: ${err.message}`);
+        });
+    }
+
   } catch (error) {
     if (!isClientConnected) {
       logger.info(`[Stream] Session ${finalSessionId}: aborted — client disconnected`);
@@ -563,7 +638,549 @@ const chatStream = async (req, res) => {
   }
 };
 
+/**
+ * Bentuk response dari record DB (dipakai untuk cache hit dan detail)
+ */
+const formatTranscription = (record, includeSegments) => ({
+  id: record.id,
+  status: record.status,
+  error_message: record.error_message || undefined,
+  audio_url: record.audio_url,
+  size_bytes: record.size_bytes,
+  language: record.language,
+  duration: record.duration,
+  transcript: record.transcript,
+  output_language: record.output_language,
+  translated: record.translated,
+  translation: record.translation,
+  segments: includeSegments ? record.segments : undefined,
+  summary: record.summary,
+  summary_update: record.summary_update,
+  summary_updated_by_id: record.summary_updated_by_id,
+  summary_updated_by_name: record.summary_updated_by_name,
+  analysis: record.analysis,
+  created_at: record.created_at,
+  finished_at: record.finished_at,
+});
+
+/**
+ * Speech-to-text — ubah audio dari URL menjadi teks (analisis AI opsional)
+ * Body: { audio_url, language?, analyze?, summarize? (default true), instruction?, output_language?, include_segments?, force_refresh? }
+ */
+const speechToText = async (req, res) => {
+  const {
+    audio_url: audioUrl,
+    language,
+    analyze = false,
+    summarize = true, // default aktif; kirim summarize: false untuk melewatinya
+    instruction,
+    output_language: outputLanguage,
+    include_segments: includeSegments = false,
+    async: runAsync = false,
+  } = req.body || {};
+
+  if (!audioUrl || typeof audioUrl !== 'string') {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'audio_url wajib diisi',
+    });
+  }
+  if (language && !/^[a-z]{2}$/i.test(language)) {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+  if (outputLanguage && !/^[a-z]{2}$/i.test(outputLanguage)) {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+  if (instruction && (typeof instruction !== 'string' || instruction.length > 1000)) {
+    return baseResponseGeneral(res.status(400), {
+      success: false,
+      message: 'instruction harus string maksimal 1000 karakter',
+    });
+  }
+
+  const userId = req.body?.employee_id || req.body?.userId || getUserId(req);
+  const forceRefresh = req.body?.force_refresh === true;
+  const startedAt = Date.now();
+  try {
+    // Cache: request identik (user + audio + parameter) dalam TTL dikembalikan dari DB
+    const requestHash = transcriptionRepo.buildRequestHash({
+      userId,
+      audioUrl,
+      language,
+      outputLanguage,
+      analyze,
+      instruction,
+      summarize,
+    });
+
+    if (aiConfig.STT_CACHE_TTL_HOURS > 0 && !forceRefresh) {
+      const cached = await transcriptionRepo.findCached(requestHash, aiConfig.STT_CACHE_TTL_HOURS);
+      if (cached) {
+        logger.info(`[STT] Cache hit: ${cached.id}`);
+        return baseResponseGeneral(res, {
+          success: true,
+          message: 'Speech to text berhasil diproses (dari cache)',
+          data: {
+            ...formatTranscription(cached, includeSegments),
+            cached: true,
+            processing_ms: Date.now() - startedAt,
+          },
+        });
+      }
+    }
+
+    // Mode antrian: simpan job pending, kirim ke RabbitMQ, balas 202 (hasil diambil lewat GET /speech-to-text/:id)
+    if (runAsync === true) {
+      if (!sttListener.isQueueEnabled()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Mode async tidak tersedia: RabbitMQ belum diaktifkan (RABBITMQ_ENABLED / RABBITMQ_URL)',
+        });
+      }
+
+      // Request identik yang masih antri/diproses dipakai ulang, agar retry client tidak menggandakan job
+      const active = await transcriptionRepo.findActive(requestHash);
+      if (active) {
+        return res.status(202).json({
+          success: true,
+          message: 'Speech to text sudah dalam antrian',
+          data: { id: active.id, status: active.status, audio_url: audioUrl, queued: true },
+        });
+      }
+
+      const job = await transcriptionRepo.createPending({
+        userId,
+        audioUrl,
+        requestHash,
+        params: {
+          language: language || null,
+          output_language: outputLanguage || null,
+          analyze: analyze === true,
+          summarize: summarize === true,
+          instruction: instruction || null,
+        },
+      });
+
+      try {
+        await sttListener.publishSttJob(
+          job.id,
+          req.authToken || (req.headers?.authorization || '').replace(/^Bearers+/i, '') || null,
+        );
+      } catch (queueError) {
+        logger.error(`[STT] Gagal publish ke RabbitMQ: ${queueError.message || queueError}`);
+        await transcriptionRepo.markFailed(job.id, `Gagal masuk antrian: ${queueError.message}`);
+        return res.status(503).json({
+          success: false,
+          message: 'Gagal memasukkan ke antrian RabbitMQ',
+        });
+      }
+
+      return res.status(202).json({
+        success: true,
+        message: 'Speech to text diterima dan masuk antrian',
+        data: { id: job.id, status: 'pending', audio_url: audioUrl, queued: true },
+      });
+    }
+
+    const {
+      sizeBytes, transcription, targetLanguage, needsTranslation, translation, analysis, summary,
+    } = await voiceService.runPipeline({
+      audioUrl, language, outputLanguage, analyze, instruction, summarize,
+    });
+    const audio = { sizeBytes };
+
+    const processingMs = Date.now() - startedAt;
+
+    // Simpan ke DB (gagal simpan tidak menggagalkan response)
+    const saved = await transcriptionRepo.saveTranscription({
+      userId,
+      audioUrl,
+      sizeBytes: audio.sizeBytes,
+      requestHash,
+      language: transcription.language,
+      outputLanguage: targetLanguage,
+      translated: needsTranslation,
+      transcript: transcription.text,
+      translation,
+      segments: transcription.segments,
+      summary,
+      analysis,
+      duration: transcription.duration,
+      sttModel: aiConfig.STT_MODEL,
+      processingMs,
+    });
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Speech to text berhasil diproses',
+      data: {
+        id: saved ? saved.id : null,
+        audio_url: audioUrl,
+        size_bytes: audio.sizeBytes,
+        language: transcription.language,
+        duration: transcription.duration,
+        transcript: transcription.text,
+        output_language: targetLanguage,
+        translated: needsTranslation,
+        translation,
+        segments: includeSegments ? transcription.segments : undefined,
+        summary,
+        analysis,
+        cached: false,
+        processing_ms: processingMs,
+      },
+    });
+  } catch (error) {
+    const status = error instanceof voiceService.VoiceError ? error.status : (error.status || 500);
+    logger.error(`Error in speechToText handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(status), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengubah suara menjadi teks',
+    });
+  }
+};
+
+/**
+ * Riwayat speech-to-text milik user
+ * Query: page?, limit? (maks 100), user_id? (fallback jika tanpa token)
+ */
+const listTranscriptions = async (req, res) => {
+  try {
+    const userId = getUserId(req) || req.query?.user_id;
+    if (!userId) {
+      return baseResponseGeneral(res.status(401), {
+        success: false,
+        message: 'User tidak terautentikasi — token tidak valid atau tidak ada',
+      });
+    }
+
+    const page = Math.max(parseInt(req.query?.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query?.limit, 10) || 20, 1), 100);
+    const result = await transcriptionRepo.listByUser(userId, { page, limit });
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Riwayat speech to text berhasil diambil',
+      data: result,
+    });
+  } catch (error) {
+    logger.error(`Error in listTranscriptions handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengambil riwayat speech to text',
+    });
+  }
+};
+
+/**
+ * Detail satu hasil speech-to-text
+ */
+const getTranscription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return baseResponseGeneral(res.status(400), {
+        success: false,
+        message: 'ID tidak valid',
+      });
+    }
+
+    const record = await transcriptionRepo.getById(id);
+    const userId = getUserId(req) || req.query?.user_id;
+    // Record milik user lain diperlakukan sama seperti tidak ditemukan
+    if (!record || (record.user_id && record.user_id !== String(userId))) {
+      return baseResponseGeneral(res.status(404), {
+        success: false,
+        message: 'Data speech to text tidak ditemukan',
+      });
+    }
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: 'Detail speech to text berhasil diambil',
+      data: formatTranscription(record, true),
+    });
+  } catch (error) {
+    logger.error(`Error in getTranscription handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengambil data speech to text',
+    });
+  }
+};
+
+const SUMMARIZE_MAX_CHARS = 50000;
+
+// Identitas pemanggil dari token login MSI (urutan klaim mengikuti api-career)
+const getRequester = (req) => {
+  const user = req.user || {};
+  const pick = (fields) => {
+    for (const field of fields) {
+      if (user[field]) return String(user[field]);
+    }
+    return null;
+  };
+  return {
+    id: pick(['employee_id', 'user_id', 'users_id', 'sub', 'id']),
+    name: pick(['name', 'employee_name', 'full_name', 'preferred_username', 'username']),
+  };
+};
+
+/**
+ * Ringkasan teks/transkrip dengan perintah bebas dari HRD.
+ * Dengan transcription_id, hasilnya disimpan ke kolom summary_update beserta pembuatnya (dari token);
+ * dengan text saja tidak ada record untuk diisi, sehingga tidak disimpan.
+ * Body: { text? | transcription_id?, instruction?, output_language? }
+ */
+const summarizeTranscript = async (req, res) => {
+  const {
+    text,
+    transcription_id: transcriptionId,
+    instruction,
+    output_language: outputLanguage = 'id',
+  } = req.body || {};
+
+  if (!text && !transcriptionId) {
+    return res.status(400).json({
+      success: false,
+      message: 'text atau transcription_id wajib diisi',
+    });
+  }
+  if (text && transcriptionId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Isi salah satu saja: text atau transcription_id',
+    });
+  }
+  if (text && (typeof text !== 'string' || !text.trim())) {
+    return res.status(400).json({ success: false, message: 'text harus berupa teks' });
+  }
+  if (text && text.length > SUMMARIZE_MAX_CHARS) {
+    return res.status(400).json({
+      success: false,
+      message: `text maksimal ${SUMMARIZE_MAX_CHARS} karakter`,
+    });
+  }
+  if (transcriptionId && !/^[0-9a-f-]{36}$/i.test(String(transcriptionId))) {
+    return res.status(400).json({ success: false, message: 'transcription_id tidak valid' });
+  }
+  if (instruction !== undefined && instruction !== null
+    && (typeof instruction !== 'string' || instruction.length > 2000)) {
+    return res.status(400).json({
+      success: false,
+      message: 'instruction harus string maksimal 2000 karakter',
+    });
+  }
+  if (!/^[a-z]{2}$/i.test(String(outputLanguage))) {
+    return res.status(400).json({
+      success: false,
+      message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+
+  const startedAt = Date.now();
+  try {
+    let source = text ? text.trim() : '';
+    let record = null;
+    if (transcriptionId) {
+      // Rekaman dibuat oleh alur applicant form, sedangkan peringkasnya HRD: pemilik record tidak dicocokkan.
+      // Akses dijaga oleh token login + ID record yang tidak bisa ditebak
+      record = await transcriptionRepo.getById(transcriptionId);
+      if (!record || record.status !== 'success') {
+        return res.status(404).json({
+          success: false,
+          message: 'Data speech to text tidak ditemukan',
+        });
+      }
+      source = record.translation || record.transcript;
+    }
+
+    const token = req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+    let summary;
+    try {
+      summary = await voiceService.summarizeText(source, {
+        outputLanguage: String(outputLanguage).toLowerCase(),
+        instruction: instruction ? instruction.trim() : undefined,
+      });
+    } catch (summaryError) {
+      // Kegagalan ringkasan juga dikabarkan ke api-career, lalu error diteruskan ke response
+      if (record) {
+        await careerSttUpdate.updateSummaryResult(record, { error: summaryError.message || String(summaryError) }, token);
+      }
+      throw summaryError;
+    }
+
+    let saved = null;
+    const requester = getRequester(req);
+    if (transcriptionId) {
+      saved = await transcriptionRepo.saveSummaryUpdate(transcriptionId, {
+        summary,
+        updatedById: requester.id,
+        updatedByName: requester.name,
+      });
+    }
+
+    // Teruskan ke api-career (summary_update saja) memakai token pemanggil. Hanya untuk transcription_id,
+    // karena butuh file_link_audio dari record. Gagal di sini tidak menggagalkan request
+    let syncedToCareer = false;
+    if (record) {
+      syncedToCareer = await careerSttUpdate.updateSummaryResult(record, { summary }, token);
+    }
+
+    return baseResponseGeneral(res, {
+      success: true,
+      message: transcriptionId && !saved
+        ? 'Ringkasan berhasil dibuat tetapi gagal disimpan'
+        : 'Ringkasan berhasil dibuat',
+      data: {
+        summary,
+        saved: Boolean(saved),
+        synced_to_career: syncedToCareer,
+        summary_updated_by_id: saved ? saved.summary_updated_by_id : null,
+        summary_updated_by_name: saved ? saved.summary_updated_by_name : null,
+        output_language: String(outputLanguage).toLowerCase(),
+        source: transcriptionId ? 'transcription' : 'text',
+        transcription_id: transcriptionId || null,
+        input_chars: source.length,
+        processing_ms: Date.now() - startedAt,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error in summarizeTranscript handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(error.status || 500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat membuat ringkasan',
+    });
+  }
+};
+
+const SUMMARIZE_ALL_MAX_ITEMS = 30;
+
+/**
+ * Ringkasan keseluruhan dari banyak transcription_id (jawaban satu kandidat).
+ * Validasi dan pengecekan ID dilakukan langsung; semua ID wajib ada dan berstatus success.
+ * Pembuatan ringkasan berjalan di background lewat RabbitMQ (lihat listeners/summary_all_listener),
+ * hasilnya dikirim ke api-career (POST /applicant-forms/summary-all) memakai ID pertama.
+ * Body: [{ transcription_id, instruction? }] atau { items: [...], output_language? }
+ */
+const summarizeAllTranscripts = async (req, res) => {
+  const body = req.body || {};
+  const items = Array.isArray(body) ? body : body.items;
+  const outputLanguage = (Array.isArray(body) ? undefined : body.output_language) || 'id';
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Body harus berupa array berisi minimal satu { transcription_id, instruction? }',
+    });
+  }
+  if (items.length > SUMMARIZE_ALL_MAX_ITEMS) {
+    return res.status(400).json({
+      success: false,
+      message: `Maksimal ${SUMMARIZE_ALL_MAX_ITEMS} item per request`,
+    });
+  }
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i] || {};
+    if (!/^[0-9a-f-]{36}$/i.test(String(item.transcription_id || ''))) {
+      return res.status(400).json({
+        success: false,
+        message: `Item ke-${i + 1}: transcription_id tidak valid`,
+      });
+    }
+    if (item.instruction !== undefined && item.instruction !== null
+      && (typeof item.instruction !== 'string' || item.instruction.length > 2000)) {
+      return res.status(400).json({
+        success: false,
+        message: `Item ke-${i + 1}: instruction harus string maksimal 2000 karakter`,
+      });
+    }
+  }
+  if (!/^[a-z]{2}$/i.test(String(outputLanguage))) {
+    return res.status(400).json({
+      success: false,
+      message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
+    });
+  }
+
+  // ID dan instruksi yang sama cukup dipakai sekali, urutan kiriman dipertahankan
+  const ids = [...new Set(items.map((item) => String(item.transcription_id).toLowerCase()))];
+  const instructions = [...new Set(items
+    .map((item) => (item.instruction || '').trim())
+    .filter(Boolean))];
+  const language = String(outputLanguage).toLowerCase();
+
+  if (!sttListener.isQueueEnabled()) {
+    return res.status(503).json({
+      success: false,
+      message: 'Summary all tidak tersedia: RabbitMQ belum diaktifkan (RABBITMQ_ENABLED / RABBITMQ_URL)',
+    });
+  }
+
+  try {
+    const records = await transcriptionRepo.getByIds(ids);
+    const byId = new Map(records.map((record) => [String(record.id).toLowerCase(), record]));
+    const invalidIds = ids.filter((id) => {
+      const record = byId.get(id);
+      return !record || record.status !== 'success' || !(record.translation || record.transcript);
+    });
+    if (invalidIds.length > 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sebagian data speech to text tidak ditemukan atau belum selesai',
+        data: { invalid_ids: invalidIds },
+      });
+    }
+
+    const jobId = crypto.randomUUID();
+    try {
+      await summaryAllListener.publishSummaryAllJob({
+        job_id: jobId,
+        transcription_ids: ids,
+        instructions,
+        output_language: language,
+        token: req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '') || null,
+      });
+    } catch (queueError) {
+      logger.error(`[Summary All] Gagal publish ke RabbitMQ: ${queueError.message || queueError}`);
+      return res.status(503).json({
+        success: false,
+        message: 'Gagal memasukkan ke antrian RabbitMQ',
+      });
+    }
+
+    return res.status(202).json({
+      success: true,
+      message: 'Summary all diterima dan masuk antrian, hasil dikirim ke api-career',
+      data: {
+        job_id: jobId,
+        queued: true,
+        output_language: language,
+        transcription_ids: ids,
+        instructions,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error in summarizeAllTranscripts handler: ${error.message || error}`);
+    return baseResponseGeneral(res.status(error.status || 500), {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat memproses summary all',
+    });
+  }
+};
+
 module.exports = {
+  summarizeTranscript,
+  summarizeAllTranscripts,
+  speechToText,
+  listTranscriptions,
+  getTranscription,
   chat,
   getHistory,
   clearHistory,
