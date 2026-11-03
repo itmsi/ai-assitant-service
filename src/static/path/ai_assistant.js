@@ -562,7 +562,7 @@ const aiAssistantPaths = {
           }
         },
         400: {
-          description: 'Validasi gagal (text/transcription_id kosong atau keduanya diisi, teks > 50.000 karakter, instruction > 2.000 karakter, output_language tidak valid)',
+          description: 'Validasi gagal (text/transcription_id kosong atau keduanya diisi, teks > 50.000 karakter, instruction kosong atau > 20.000 karakter, output_language tidak valid)',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
         },
         401: {
@@ -601,7 +601,7 @@ const aiAssistantPaths = {
                     required: ['transcription_id'],
                     properties: {
                       transcription_id: { type: 'string', format: 'uuid' },
-                      instruction: { type: 'string', maxLength: 2000 }
+                      instruction: { type: 'string', maxLength: 20000 }
                     }
                   }
                 },
@@ -618,7 +618,7 @@ const aiAssistantPaths = {
                         required: ['transcription_id'],
                         properties: {
                           transcription_id: { type: 'string', format: 'uuid' },
-                          instruction: { type: 'string', maxLength: 2000 }
+                          instruction: { type: 'string', maxLength: 20000 }
                         }
                       }
                     },
@@ -675,7 +675,7 @@ const aiAssistantPaths = {
           }
         },
         400: {
-          description: 'Validasi gagal (body bukan array/kosong, > 30 item, transcription_id tidak valid, instruction > 2.000 karakter, output_language tidak valid)',
+          description: 'Validasi gagal (body bukan array/kosong, > 30 item, transcription_id tidak valid, tidak ada satu pun instruction, atau instruction > 20.000 karakter, output_language tidak valid)',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/AiErrorResponse' } } }
         },
         401: {
