@@ -916,6 +916,8 @@ const getTranscription = async (req, res) => {
 };
 
 const SUMMARIZE_MAX_CHARS = 50000;
+// instruction = prompt_ai_summary dari api-hrm; prompt assessor HR bisa 6-7 ribu karakter
+const SUMMARIZE_INSTRUCTION_MAX_CHARS = 20000;
 
 // Identitas pemanggil dari token login MSI (urutan klaim mengikuti api-career)
 const getRequester = (req) => {
@@ -970,11 +972,11 @@ const summarizeTranscript = async (req, res) => {
   if (transcriptionId && !/^[0-9a-f-]{36}$/i.test(String(transcriptionId))) {
     return res.status(400).json({ success: false, message: 'transcription_id tidak valid' });
   }
-  if (instruction !== undefined && instruction !== null
-    && (typeof instruction !== 'string' || instruction.length > 2000)) {
+  // Tidak ada prompt default: instruction berasal dari prompt_ai_summary (api-hrm)
+  if (typeof instruction !== 'string' || !instruction.trim() || instruction.length > SUMMARIZE_INSTRUCTION_MAX_CHARS) {
     return res.status(400).json({
       success: false,
-      message: 'instruction harus string maksimal 2000 karakter',
+      message: `instruction (prompt_ai_summary) wajib diisi, string maksimal ${SUMMARIZE_INSTRUCTION_MAX_CHARS} karakter`,
     });
   }
   if (!/^[a-z]{2}$/i.test(String(outputLanguage))) {
@@ -1006,7 +1008,7 @@ const summarizeTranscript = async (req, res) => {
     try {
       summary = await voiceService.summarizeText(source, {
         outputLanguage: String(outputLanguage).toLowerCase(),
-        instruction: instruction ? instruction.trim() : undefined,
+        instruction: instruction.trim(),
       });
     } catch (summaryError) {
       // Kegagalan ringkasan juga dikabarkan ke api-career, lalu error diteruskan ke response
@@ -1095,10 +1097,10 @@ const summarizeAllTranscripts = async (req, res) => {
       });
     }
     if (item.instruction !== undefined && item.instruction !== null
-      && (typeof item.instruction !== 'string' || item.instruction.length > 2000)) {
+      && (typeof item.instruction !== 'string' || item.instruction.length > SUMMARIZE_INSTRUCTION_MAX_CHARS)) {
       return res.status(400).json({
         success: false,
-        message: `Item ke-${i + 1}: instruction harus string maksimal 2000 karakter`,
+        message: `Item ke-${i + 1}: instruction harus string maksimal ${SUMMARIZE_INSTRUCTION_MAX_CHARS} karakter`,
       });
     }
   }
@@ -1115,6 +1117,14 @@ const summarizeAllTranscripts = async (req, res) => {
     .map((item) => (item.instruction || '').trim())
     .filter(Boolean))];
   const language = String(outputLanguage).toLowerCase();
+
+  // Tidak ada prompt default: minimal satu instruction (prompt_ai_summary) wajib ada
+  if (instructions.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Minimal satu item harus memiliki instruction (prompt_ai_summary)',
+    });
+  }
 
   if (!sttListener.isQueueEnabled()) {
     return res.status(503).json({

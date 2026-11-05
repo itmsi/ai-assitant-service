@@ -303,7 +303,7 @@ const aiAssistantSchemas = {
       },
       instruction: {
         type: 'string',
-        maxLength: 2000,
+        maxLength: 20000,
         description: 'Opsional. Perintah bebas dari HRD. Jika kosong, hasilnya ringkasan umum 2-4 kalimat. Jika diisi, jawaban mengikuti perintah dan hanya berdasarkan isi transkrip',
         example: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'
       },
