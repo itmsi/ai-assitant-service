@@ -192,7 +192,7 @@ const aiAssistantSchemas = {
       },
       instruction: {
         type: 'string',
-        maxLength: 1000,
+        maxLength: 20000,
         description: 'Opsional, hanya dipakai jika analyze=true. Pertanyaan/instruksi analisis tambahan, jawabannya di `analysis.custom_answer`',
         example: 'Apakah customer menyetujui penawaran?'
       },
