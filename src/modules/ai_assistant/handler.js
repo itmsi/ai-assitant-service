@@ -697,10 +697,10 @@ const speechToText = async (req, res) => {
       message: 'output_language harus kode ISO-639-1 (contoh: id, en, zh)',
     });
   }
-  if (instruction && (typeof instruction !== 'string' || instruction.length > 1000)) {
+  if (instruction && (typeof instruction !== 'string' || instruction.length > 20000)) {
     return baseResponseGeneral(res.status(400), {
       success: false,
-      message: 'instruction harus string maksimal 1000 karakter',
+      message: 'instruction harus string maksimal 20000 karakter',
     });
   }
 
