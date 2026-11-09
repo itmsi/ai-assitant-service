@@ -46,13 +46,22 @@ const processJob = async (job) => {
     if (!record || record.status !== 'success') return null
     const transcript = record.translation || record.transcript
     if (!transcript) return null
-    const answerSummary = typeof record.summary === 'string' ? record.summary.trim() : ''
+    // summary_update = hasil penilaian assessor (JSON skor) / hasil edit HRD; dipakai lebih dulu.
+    // summary = ringkasan otomatis dari STT, dipakai kalau summary_update kosong
+    const clean = (value) => (typeof value === 'string' ? value.trim() : '')
+    const answerSummary = clean(record.summary_update) || clean(record.summary)
     return {
       question: (job.questions && job.questions[id]) || null,
       transcript,
       summary: answerSummary || null,
     }
   })
+  logger.info(
+    `[Summary All Worker] Job ${job.job_id}: ${ids.length} jawaban, `
+    + `summary_update=${records.filter((r) => r.summary_update).length}, `
+    + `summary=${records.filter((r) => r.summary).length}, `
+    + `question=${Object.keys(job.questions || {}).length}`,
+  )
   if (texts.some((text) => !text)) {
     const message = 'sebagian transkrip tidak lagi tersedia'
     logger.error(`[Summary All Worker] Job ${job.job_id} dibatalkan: ${message}`)
