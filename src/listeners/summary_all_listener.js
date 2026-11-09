@@ -40,10 +40,28 @@ const processJob = async (job) => {
 
   const records = await transcriptionRepo.getByIds(ids)
   const byId = new Map(records.map((record) => [String(record.id).toLowerCase(), record]))
+  // Tiap jawaban: transkrip asli (wajib) + ringkasan per jawaban (opsional, boleh kosong)
   const texts = ids.map((id) => {
     const record = byId.get(id)
-    return record && record.status === 'success' ? (record.translation || record.transcript) : null
+    if (!record || record.status !== 'success') return null
+    const transcript = record.translation || record.transcript
+    if (!transcript) return null
+    // summary_update = hasil penilaian assessor (JSON skor) / hasil edit HRD; dipakai lebih dulu.
+    // summary = ringkasan otomatis dari STT, dipakai kalau summary_update kosong
+    const clean = (value) => (typeof value === 'string' ? value.trim() : '')
+    const answerSummary = clean(record.summary_update) || clean(record.summary)
+    return {
+      question: (job.questions && job.questions[id]) || null,
+      transcript,
+      summary: answerSummary || null,
+    }
   })
+  logger.info(
+    `[Summary All Worker] Job ${job.job_id}: ${ids.length} jawaban, `
+    + `summary_update=${records.filter((r) => r.summary_update).length}, `
+    + `summary=${records.filter((r) => r.summary).length}, `
+    + `question=${Object.keys(job.questions || {}).length}`,
+  )
   if (texts.some((text) => !text)) {
     const message = 'sebagian transkrip tidak lagi tersedia'
     logger.error(`[Summary All Worker] Job ${job.job_id} dibatalkan: ${message}`)

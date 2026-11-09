@@ -601,7 +601,8 @@ const aiAssistantPaths = {
                     required: ['transcription_id'],
                     properties: {
                       transcription_id: { type: 'string', format: 'uuid' },
-                      instruction: { type: 'string', maxLength: 20000 }
+                      instruction: { type: 'string', maxLength: 20000 },
+                      question: { type: 'string', maxLength: 2000, description: 'Pertanyaan interview untuk jawaban ini (opsional). Kirim berurutan sesuai urutan pertanyaan; ikut dikirim ke LLM bersama transkrip dan ringkasan jawaban.' }
                     }
                   }
                 },
@@ -618,7 +619,8 @@ const aiAssistantPaths = {
                         required: ['transcription_id'],
                         properties: {
                           transcription_id: { type: 'string', format: 'uuid' },
-                          instruction: { type: 'string', maxLength: 20000 }
+                          instruction: { type: 'string', maxLength: 20000 },
+                          question: { type: 'string', maxLength: 2000, description: 'Pertanyaan interview untuk jawaban ini (opsional)' }
                         }
                       }
                     },
@@ -638,6 +640,20 @@ const aiAssistantPaths = {
                   {
                     transcription_id: '72058640-5531-4c30-8213-faf94cc1f943',
                     instruction: 'Tuliskan kelebihan dan kekurangan kandidat dalam bentuk poin'
+                  }
+                ]
+              },
+              withQuestions: {
+                summary: 'Dengan pertanyaan per jawaban (urut sesuai pertanyaan); instruction cukup di item pertama',
+                value: [
+                  {
+                    transcription_id: '82957122-2eef-4461-b642-4de9e8d93876',
+                    instruction: 'Susun ringkasan akhir kandidat dalam JSON sesuai format yang diminta',
+                    question: 'Ceritakan tentang diri Anda dan latar belakang Anda'
+                  },
+                  {
+                    transcription_id: '72058640-5531-4c30-8213-faf94cc1f943',
+                    question: 'Mengapa Anda melamar posisi ini?'
                   }
                 ]
               },
