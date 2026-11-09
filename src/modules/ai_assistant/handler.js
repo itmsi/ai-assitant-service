@@ -1063,6 +1063,7 @@ const summarizeTranscript = async (req, res) => {
 };
 
 const SUMMARIZE_ALL_MAX_ITEMS = 30;
+const SUMMARIZE_QUESTION_MAX_CHARS = 2000;
 
 /**
  * Ringkasan keseluruhan dari banyak transcription_id (jawaban satu kandidat).
@@ -1103,6 +1104,13 @@ const summarizeAllTranscripts = async (req, res) => {
         message: `Item ke-${i + 1}: instruction harus string maksimal ${SUMMARIZE_INSTRUCTION_MAX_CHARS} karakter`,
       });
     }
+    if (item.question !== undefined && item.question !== null
+      && (typeof item.question !== 'string' || item.question.length > SUMMARIZE_QUESTION_MAX_CHARS)) {
+      return res.status(400).json({
+        success: false,
+        message: `Item ke-${i + 1}: question harus string maksimal ${SUMMARIZE_QUESTION_MAX_CHARS} karakter`,
+      });
+    }
   }
   if (!/^[a-z]{2}$/i.test(String(outputLanguage))) {
     return res.status(400).json({
@@ -1117,6 +1125,14 @@ const summarizeAllTranscripts = async (req, res) => {
     .map((item) => (item.instruction || '').trim())
     .filter(Boolean))];
   const language = String(outputLanguage).toLowerCase();
+
+  // Pertanyaan per transcription_id (opsional); item pertama yang punya pertanyaan dipakai
+  const questions = {};
+  items.forEach((item) => {
+    const itemId = String(item.transcription_id).toLowerCase();
+    const question = typeof item.question === 'string' ? item.question.trim() : '';
+    if (question && !questions[itemId]) questions[itemId] = question;
+  });
 
   // Tidak ada prompt default: minimal satu instruction (prompt_ai_summary) wajib ada
   if (instructions.length === 0) {
@@ -1154,6 +1170,7 @@ const summarizeAllTranscripts = async (req, res) => {
         job_id: jobId,
         transcription_ids: ids,
         instructions,
+        questions,
         output_language: language,
         token: req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '') || null,
       });

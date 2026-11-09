@@ -40,9 +40,18 @@ const processJob = async (job) => {
 
   const records = await transcriptionRepo.getByIds(ids)
   const byId = new Map(records.map((record) => [String(record.id).toLowerCase(), record]))
+  // Tiap jawaban: transkrip asli (wajib) + ringkasan per jawaban (opsional, boleh kosong)
   const texts = ids.map((id) => {
     const record = byId.get(id)
-    return record && record.status === 'success' ? (record.translation || record.transcript) : null
+    if (!record || record.status !== 'success') return null
+    const transcript = record.translation || record.transcript
+    if (!transcript) return null
+    const answerSummary = typeof record.summary === 'string' ? record.summary.trim() : ''
+    return {
+      question: (job.questions && job.questions[id]) || null,
+      transcript,
+      summary: answerSummary || null,
+    }
   })
   if (texts.some((text) => !text)) {
     const message = 'sebagian transkrip tidak lagi tersedia'
