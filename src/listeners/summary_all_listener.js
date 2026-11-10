@@ -74,6 +74,7 @@ const processJob = async (job) => {
     summary = await voiceService.summarizeAll(texts, {
       outputLanguage: job.output_language || 'id',
       instructions: job.instructions || [],
+      computedScores: job.computed_scores || null,
     })
   } catch (error) {
     logger.error(`[Summary All Worker] Job ${job.job_id} gagal membuat ringkasan: ${error.message || error}`)

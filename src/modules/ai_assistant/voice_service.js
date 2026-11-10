@@ -480,7 +480,7 @@ const normalizeAnswer = (item) => (typeof item === 'string'
   ? { question: null, transcript: item, summary: null }
   : { question: item.question || null, transcript: item.transcript, summary: item.summary || null });
 
-const summarizeCombined = async (texts, { outputLanguage, instructions, partial }) => {
+const summarizeCombined = async (texts, { outputLanguage, instructions, partial, computedScores = null }) => {
   const { openai, config } = getClient();
   const lang = `${languageName(outputLanguage)} (ISO-639-1 "${outputLanguage}")`;
   const sourceLabel = partial ? 'per-answer summaries' : 'transcripts and per-answer summaries';
@@ -493,6 +493,9 @@ const summarizeCombined = async (texts, { outputLanguage, instructions, partial 
     'Follow the HR instruction(s) and produce ONE combined answer that covers all answers together, using ONLY these sources.',
     ...(hasSummaries
       ? ['Each answer has the full <transcript> and, when available, an earlier AI-generated <summary> of it. Treat the transcript as the source of truth; if the summary differs from the transcript, follow the transcript.']
+      : []),
+    ...(computedScores
+      ? ['The <computed_scores> block holds scores already computed by the system. Use those numbers exactly as given (overall score, per-question scores, per-pillar scores, and the score-based recommendation); never recompute, round differently, or change them.']
       : []),
     'If the sources do not contain the requested information, say it is not mentioned instead of guessing.',
     // Jawaban sudah berurutan sesuai pertanyaan interview; nomor hanya penanda urutan
@@ -516,12 +519,20 @@ const summarizeCombined = async (texts, { outputLanguage, instructions, partial 
     })
     .join('\n\n');
 
+  const scoresBlock = computedScores
+    ? `<computed_scores>
+${JSON.stringify(computedScores, null, 2)}
+</computed_scores>
+
+`
+    : '';
+
   const completion = await openai.chat.completions.create({
     model: aiConfig.STT_ANALYSIS_MODEL || config.model,
     temperature: 0.2,
     messages: [
       { role: 'system', content: system },
-      { role: 'user', content: `${header}${body}` },
+      { role: 'user', content: `${header}${scoresBlock}${body}` },
     ],
   });
 
@@ -532,7 +543,7 @@ const summarizeCombined = async (texts, { outputLanguage, instructions, partial 
  * Ringkasan keseluruhan dari banyak transkrip. Normalnya satu panggilan dengan transkrip asli;
  * jika total terlalu panjang, tiap transkrip diringkas dulu sesuai instruksi lalu digabung
  */
-const summarizeAll = async (texts, { outputLanguage = 'id', instructions = [] } = {}) => {
+const summarizeAll = async (texts, { outputLanguage = 'id', instructions = [], computedScores = null } = {}) => {
   if (!instructions.length) {
     throw new VoiceError('instruction (prompt_ai_summary) wajib diisi', 400);
   }
@@ -542,7 +553,7 @@ const summarizeAll = async (texts, { outputLanguage = 'id', instructions = [] } 
     0,
   );
   if (totalChars <= SUMMARIZE_ALL_SINGLE_MAX_CHARS) {
-    return summarizeCombined(answers, { outputLanguage, instructions, partial: false });
+    return summarizeCombined(answers, { outputLanguage, instructions, partial: false, computedScores });
   }
 
   // Terlalu panjang untuk satu panggilan: tiap transkrip diringkas dulu (ringkasan lama tidak dipakai)
@@ -556,7 +567,7 @@ const summarizeAll = async (texts, { outputLanguage = 'id', instructions = [] } 
     );
     partials.push(...results.map((text, k) => ({ question: chunk[k].question, transcript: text })));
   }
-  return summarizeCombined(partials, { outputLanguage, instructions, partial: true });
+  return summarizeCombined(partials, { outputLanguage, instructions, partial: true, computedScores });
 };
 
 const runPipeline = async ({
