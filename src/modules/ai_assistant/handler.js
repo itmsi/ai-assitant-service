@@ -1064,6 +1064,7 @@ const summarizeTranscript = async (req, res) => {
 
 const SUMMARIZE_ALL_MAX_ITEMS = 30;
 const SUMMARIZE_QUESTION_MAX_CHARS = 2000;
+const SUMMARIZE_COMPUTED_SCORES_MAX_CHARS = 20000;
 
 /**
  * Ringkasan keseluruhan dari banyak transcription_id (jawaban satu kandidat).
@@ -1076,6 +1077,18 @@ const summarizeAllTranscripts = async (req, res) => {
   const body = req.body || {};
   const items = Array.isArray(body) ? body : body.items;
   const outputLanguage = (Array.isArray(body) ? undefined : body.output_language) || 'id';
+  // Skor yang sudah dihitung sistem (opsional, hanya untuk body berbentuk objek); dipakai LLM apa adanya
+  const computedScores = !Array.isArray(body) && body.computed_scores !== undefined && body.computed_scores !== null
+    ? body.computed_scores
+    : null;
+  if (computedScores !== null
+    && (typeof computedScores !== 'object' || Array.isArray(computedScores)
+      || JSON.stringify(computedScores).length > SUMMARIZE_COMPUTED_SCORES_MAX_CHARS)) {
+    return res.status(400).json({
+      success: false,
+      message: `computed_scores harus object maksimal ${SUMMARIZE_COMPUTED_SCORES_MAX_CHARS} karakter`,
+    });
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({
@@ -1171,6 +1184,7 @@ const summarizeAllTranscripts = async (req, res) => {
         transcription_ids: ids,
         instructions,
         questions,
+        computed_scores: computedScores,
         output_language: language,
         token: req.authToken || (req.headers?.authorization || '').replace(/^Bearer\s+/i, '') || null,
       });
