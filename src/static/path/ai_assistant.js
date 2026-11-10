@@ -624,7 +624,8 @@ const aiAssistantPaths = {
                         }
                       }
                     },
-                    output_language: { type: 'string', default: 'id', description: 'Kode bahasa ISO-639-1 untuk hasil (id, en, zh)' }
+                    output_language: { type: 'string', default: 'id', description: 'Kode bahasa ISO-639-1 untuk hasil (id, en, zh)' },
+                    computed_scores: { type: 'object', description: 'Opsional. Skor yang sudah dihitung sistem (overall_score_5, overall_score_100, per_video, per_pillar, recommendation_by_score, recommendation_after_score_rules, score_rules_applied). Diberikan ke LLM sebagai blok <computed_scores> dan wajib dipakai apa adanya, bukan dihitung ulang. Maksimal 20.000 karakter.' }
                   }
                 }
               ]
