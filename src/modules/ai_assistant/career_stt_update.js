@@ -1,6 +1,7 @@
 const axios = require("axios");
 const aiConfig = require("../../config/ai");
 const { Logger } = require("../../utils/logger");
+const ssoAuth = require("./middleware/sso-auth");
 
 const logger = Logger;
 
@@ -17,6 +18,19 @@ const getUpdateUrl = (updatePath = UPDATE_PATH) => {
 const isUpdateEnabled = () => Boolean(getUpdateUrl());
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Token layanan dari login SSO (SSO_USERNAME/SSO_PASSWORD). Login dilakukan saat pertama
+// dibutuhkan kalau proses ini belum login, karena auto-login hanya dijalankan di server
+// standalone AI Assistant, bukan di proses utama.
+const getServiceToken = async () => {
+  try {
+    if (ssoAuth.isLoggedIn()) return ssoAuth.getToken();
+    return (await ssoAuth.login()) || null;
+  } catch (error) {
+    logger.warn(`[STT Update] login token layanan gagal: ${error.message}`);
+    return null;
+  }
+};
 
 /**
  * Susun body untuk POST /applicant_form_contents/update-stt (api-career).
@@ -84,23 +98,29 @@ const postToCareer = async (
   } = {},
 ) => {
   if (!isUpdateEnabled()) return false;
-  if (!token) {
+
+  // Token SSO milik request asal diteruskan apa adanya. Kalau tidak ada, atau ditolak
+  // gateway (mis. token undangan pelamar: 401 "No mandatory 'iss' in claims"), dipakai
+  // token layanan hasil login SSO_USERNAME/SSO_PASSWORD.
+  let authToken = token || (await getServiceToken());
+  if (!authToken) {
     logger.warn(
-      `[STT Update] ${label} dilewati: request tidak membawa token SSO`,
+      `[STT Update] ${label} dilewati: request tidak membawa token SSO dan token layanan tidak tersedia`,
     );
     return false;
   }
+  let triedServiceToken = authToken !== token;
 
   const url = getUpdateUrl(updatePath);
-  const headers = { "Content-Type": "application/json" };
-  // Token SSO milik request asal (sama dengan yang dipakai project), diteruskan apa adanya
-  headers.Authorization = `Bearer ${token}`;
 
   let lastError = "";
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const response = await axios.post(url, payload, {
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
         timeout,
         validateStatus: () => true,
       });
@@ -113,6 +133,18 @@ const postToCareer = async (
         return true;
       }
       lastError = `HTTP ${response.status} ${String(response.data?.message || "").slice(0, 200)}`;
+      // 401: coba sekali lagi dengan token layanan sebelum menyerah
+      if (response.status === 401 && !triedServiceToken) {
+        triedServiceToken = true;
+        const serviceToken = await getServiceToken();
+        if (serviceToken && serviceToken !== authToken) {
+          logger.warn(
+            `[STT Update] ${label} ditolak (${lastError}), mencoba token layanan`,
+          );
+          authToken = serviceToken;
+          continue;
+        }
+      }
       // 4xx = permintaan/otorisasi salah, mengulang tidak akan membantu
       if (response.status >= 400 && response.status < 500) break;
       if (response.status === 201) break;
